@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { transcribe, type TranscriptionResult } from "./transcription";
+import { MoodPreview } from "./MoodPreview";
 
 function App() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -9,6 +10,7 @@ function App() {
   );
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TranscriptionResult | null>(null);
+  const [image, setImage] = useState<ImageBitmap | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Revoke the object URL when it changes or on unmount to avoid leaks.
@@ -29,6 +31,24 @@ function App() {
     setResult(null);
     setError(null);
     setStatus("idle");
+  }
+
+  // Decode the uploaded image to an ImageBitmap the renderer can draw, and
+  // dispose the previous one to free GPU/CPU memory.
+  useEffect(() => {
+    return () => {
+      if (image) image.close();
+    };
+  }, [image]);
+
+  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const bitmap = await createImageBitmap(file);
+    setImage((prev) => {
+      if (prev) prev.close();
+      return bitmap;
+    });
   }
 
   async function handleTranscribe() {
@@ -55,6 +75,22 @@ function App() {
             Upload a song, then transcribe it.
           </p>
         </header>
+
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col items-center gap-2 border border-dashed border-neutral-700 rounded-xl p-6 cursor-pointer hover:border-neutral-500 transition-colors">
+            <span className="text-sm text-neutral-300">
+              {image ? "Background image loaded" : "Choose a background image"}
+            </span>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleImageChange}
+              className="hidden"
+            />
+            <span className="text-xs text-neutral-500">Click to browse</span>
+          </label>
+          <MoodPreview image={image} />
+        </div>
 
         <label className="flex flex-col items-center gap-3 border border-dashed border-neutral-700 rounded-xl p-8 cursor-pointer hover:border-neutral-500 transition-colors">
           <span className="text-sm text-neutral-300">
