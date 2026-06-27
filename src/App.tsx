@@ -14,7 +14,7 @@ function App() {
   );
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TranscriptionResult | null>(null);
-  const [image, setImage] = useState<ImageBitmap | null>(null);
+  const [images, setImages] = useState<ImageBitmap[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // Lyric lines derived from the transcription, synced by word-level timing.
@@ -43,21 +43,20 @@ function App() {
     setStatus("idle");
   }
 
-  // Decode the uploaded image to an ImageBitmap the renderer can draw, and
-  // dispose the previous one to free GPU/CPU memory.
+  // Dispose decoded bitmaps on unmount to free memory.
   useEffect(() => {
     return () => {
-      if (image) image.close();
+      images.forEach((b) => b.close());
     };
-  }, [image]);
+  }, [images]);
 
-  async function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const bitmap = await createImageBitmap(file);
-    setImage((prev) => {
-      if (prev) prev.close();
-      return bitmap;
+  async function handleImagesChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    const bitmaps = await Promise.all(files.map((f) => createImageBitmap(f)));
+    setImages((prev) => {
+      prev.forEach((b) => b.close());
+      return bitmaps;
     });
   }
 
@@ -89,17 +88,22 @@ function App() {
         <div className="flex flex-col gap-3">
           <label className="flex flex-col items-center gap-2 border border-dashed border-neutral-700 rounded-xl p-6 cursor-pointer hover:border-neutral-500 transition-colors">
             <span className="text-sm text-neutral-300">
-              {image ? "Background image loaded" : "Choose a background image"}
+              {images.length > 0
+                ? `${images.length} background image${images.length > 1 ? "s" : ""} loaded`
+                : "Choose background image(s)"}
             </span>
             <input
               type="file"
               accept="image/*"
-              onChange={handleImageChange}
+              multiple
+              onChange={handleImagesChange}
               className="hidden"
             />
-            <span className="text-xs text-neutral-500">Click to browse</span>
+            <span className="text-xs text-neutral-500">
+              Click to browse — select multiple to crossfade
+            </span>
           </label>
-          <MoodPreview image={image} lines={lines} audioRef={audioRef} />
+          <MoodPreview images={images} lines={lines} audioRef={audioRef} />
           {lines.length > 0 && (
             <p className="text-xs text-neutral-500 text-center">
               Press play below — lyrics sync to the audio.

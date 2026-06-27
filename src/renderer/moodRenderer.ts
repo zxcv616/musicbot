@@ -25,12 +25,14 @@ export interface LyricLine {
 }
 
 export interface FrameInputs {
-  /** The (single, for now) background image, or null for a black frame. */
-  image: FrameImage | null;
+  /** Background images, in order. Empty = black frame. */
+  images: FrameImage[];
   /** Free-running animation clock in seconds. Drives the animated grain. */
   timeSeconds: number;
-  /** Audio playback position in seconds. Drives lyric line sync. */
+  /** Audio playback position in seconds. Drives lyric sync, motion, crossfades. */
   playbackSeconds?: number;
+  /** Total song length in seconds, used to spread images across the song. */
+  durationSeconds?: number;
   /** Lyric lines to display, in order. Empty/omitted = no text. */
   lines?: LyricLine[];
 }
@@ -67,9 +69,7 @@ export class MoodRenderer {
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, width, height);
 
-    if (inputs.image) {
-      this.drawImageCover(ctx, inputs.image, width, height);
-    }
+    this.drawBackground(ctx, width, height, inputs);
 
     this.applyTint(ctx, width, height);
     this.applyLiftBlacks(ctx, width, height);
@@ -86,38 +86,171 @@ export class MoodRenderer {
     ctx.filter = "none";
   }
 
-  // --- Background image: center-crop "cover" fill + colour grade -----------
+  // --- Background: multi-image crossfade + Ken-Burns drift ----------------
 
-  private drawImageCover(
+  private drawBackground(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    inputs: FrameInputs,
+  ): void {
+    const images = inputs.images;
+    if (images.length === 0) return;
+    const t = inputs.playbackSeconds ?? 0;
+
+    const schedule = this.computeSchedule(images.length, inputs);
+
+    // Primary image = the one whose window contains t.
+    let i = 0;
+    for (let k = 0; k < schedule.length; k++) {
+      if (t >= schedule[k].start) i = k;
+      else break;
+    }
+    const seg = schedule[i];
+
+    // Draw the primary image fully opaque, with its own Ken-Burns drift.
+    this.drawKenBurnsImage(ctx, images[i], width, height, t - seg.motionStart, 1);
+
+    // Crossfade into the next image over the last `crossfadeSeconds` of the
+    // window. Drawing the incoming image at ramping alpha over the opaque
+    // outgoing one is a true dissolve (out·(1−p) + in·p).
+    const cf = this.preset.background.crossfadeSeconds;
+    if (i + 1 < images.length && cf > 0) {
+      const cfStart = seg.end - cf;
+      if (t >= cfStart) {
+        const p = clamp((t - cfStart) / cf, 0, 1);
+        const next = schedule[i + 1];
+        this.drawKenBurnsImage(
+          ctx,
+          images[i + 1],
+          width,
+          height,
+          t - next.motionStart,
+          p,
+        );
+      }
+    }
+  }
+
+  /** Even-spaced image windows across the song, snapped to lyric line starts. */
+  private computeSchedule(
+    count: number,
+    inputs: FrameInputs,
+  ): { start: number; end: number; motionStart: number }[] {
+    const cf = this.preset.background.crossfadeSeconds;
+    const lines = inputs.lines ?? [];
+    const duration =
+      inputs.durationSeconds && inputs.durationSeconds > 0
+        ? inputs.durationSeconds
+        : lines.length > 0
+          ? lines[lines.length - 1].end
+          : 0;
+
+    if (count <= 1 || duration <= 0) {
+      return [{ start: 0, end: Number.POSITIVE_INFINITY, motionStart: 0 }];
+    }
+
+    // Even split points, then snap interior boundaries to the nearest lyric
+    // line start so each image change lands on a line, not mid-phrase.
+    const slot = duration / count;
+    const bounds: number[] = [];
+    for (let k = 0; k <= count; k++) {
+      let b = k * slot;
+      if (k > 0 && k < count && lines.length > 0) {
+        b = this.nearestLineStart(b, lines);
+      }
+      bounds.push(b);
+    }
+    // Keep boundaries strictly increasing after snapping.
+    for (let k = 1; k < bounds.length; k++) {
+      if (bounds[k] <= bounds[k - 1]) bounds[k] = bounds[k - 1] + 0.01;
+    }
+
+    const schedule: { start: number; end: number; motionStart: number }[] = [];
+    for (let k = 0; k < count; k++) {
+      schedule.push({
+        start: bounds[k],
+        end: bounds[k + 1],
+        // Motion begins as the image first appears (its crossfade-in start) and
+        // runs continuously for its whole life, so the drift never jumps.
+        motionStart: Math.max(0, bounds[k] - cf),
+      });
+    }
+    return schedule;
+  }
+
+  private nearestLineStart(time: number, lines: LyricLine[]): number {
+    let best = lines[0].start;
+    let bestDist = Math.abs(time - best);
+    for (const line of lines) {
+      const d = Math.abs(time - line.start);
+      if (d < bestDist) {
+        best = line.start;
+        bestDist = d;
+      }
+    }
+    return best;
+  }
+
+  /** Center-crop "cover" fill + colour grade, with optional Ken-Burns drift. */
+  private drawKenBurnsImage(
     ctx: CanvasRenderingContext2D,
     image: FrameImage,
     width: number,
     height: number,
+    localTime: number,
+    alpha: number,
   ): void {
     const bg = this.preset.background;
+    const kb = this.preset.motion.kenBurns;
     const iw = image.width;
     const ih = image.height;
-    const imageRatio = iw / ih;
-    const frameRatio = width / height;
 
-    let dw: number;
-    let dh: number;
-    if (imageRatio > frameRatio) {
-      // Image is wider than the frame → match height, crop the sides.
-      dh = height;
-      dw = height * imageRatio;
-    } else {
-      // Image is taller/narrower → match width, crop top & bottom.
-      dw = width;
-      dh = width / imageRatio;
+    // Cover scale: smallest scale that fills the frame.
+    const coverScale = Math.max(width / iw, height / ih);
+    const coverW = iw * coverScale;
+    const coverH = ih * coverScale;
+
+    let drawW = coverW;
+    let drawH = coverH;
+    let panX = 0;
+    let panY = 0;
+
+    if (kb.enabled) {
+      const cycle = Math.max(kb.cycleSeconds, 1e-3);
+      const phase = (2 * Math.PI * localTime) / cycle;
+      // Smooth ease-in/out zoom oscillation (zoomFrom → zoomTo → zoomFrom).
+      const zoomOsc = (1 - Math.cos(phase)) / 2;
+      const zoom = kb.zoomFrom + (kb.zoomTo - kb.zoomFrom) * zoomOsc;
+
+      const ampX = ((kb.panXvw / 100) * width) / 2;
+      const ampY = ((kb.panYvh / 100) * height) / 2;
+      const zMin = Math.min(kb.zoomFrom, kb.zoomTo);
+
+      // Overscan so even at minimum zoom there is slack to pan without ever
+      // exposing an edge of the image.
+      const reqX = (width + 2 * ampX) / (coverW * zMin);
+      const reqY = (height + 2 * ampY) / (coverH * zMin);
+      const overscan = Math.max(1, reqX, reqY);
+
+      drawW = coverW * overscan * zoom;
+      drawH = coverH * overscan * zoom;
+
+      const slackX = (drawW - width) / 2;
+      const slackY = (drawH - height) / 2;
+      // Elliptical drift (sin × cos) reads more organic than a straight line.
+      panX = clamp(ampX * Math.sin(phase), -slackX, slackX);
+      panY = clamp(ampY * Math.cos(phase), -slackY, slackY);
     }
-    const dx = (width - dw) / 2;
-    const dy = (height - dh) / 2;
 
-    // Colour grade is applied as the image is drawn.
+    const dx = (width - drawW) / 2 + panX;
+    const dy = (height - drawH) / 2 + panY;
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
     ctx.filter = `saturate(${bg.saturation}) contrast(${bg.contrast}) brightness(${bg.brightness})`;
-    ctx.drawImage(image, dx, dy, dw, dh);
-    ctx.filter = "none";
+    ctx.drawImage(image, dx, dy, drawW, drawH);
+    ctx.restore();
   }
 
   // --- Subtle colour cast (warm/cool) -------------------------------------

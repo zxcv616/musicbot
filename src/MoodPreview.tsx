@@ -7,7 +7,7 @@ import {
 } from "./renderer/moodRenderer";
 
 interface MoodPreviewProps {
-  image: FrameImage | null;
+  images: FrameImage[];
   lines?: LyricLine[];
   audioRef?: React.RefObject<HTMLAudioElement | null>;
 }
@@ -21,14 +21,14 @@ interface MoodPreviewProps {
  * through refs so changing the image or lyrics never rebuilds it. Lyric sync is
  * driven by the <audio> element's currentTime; grain animates off a free clock.
  */
-export function MoodPreview({ image, lines, audioRef }: MoodPreviewProps) {
+export function MoodPreview({ images, lines, audioRef }: MoodPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Latest per-frame inputs, read inside the rAF loop without re-running it.
-  const imageRef = useRef(image);
+  const imagesRef = useRef(images);
   const linesRef = useRef(lines);
   const audioElRef = useRef(audioRef);
-  imageRef.current = image;
+  imagesRef.current = images;
   linesRef.current = lines;
   audioElRef.current = audioRef;
 
@@ -44,10 +44,14 @@ export function MoodPreview({ image, lines, audioRef }: MoodPreviewProps) {
     let raf = 0;
     const start = performance.now();
     const loop = (now: number) => {
+      const audio = audioElRef.current?.current;
+      const duration =
+        audio && Number.isFinite(audio.duration) ? audio.duration : undefined;
       renderer.render(ctx, {
-        image: imageRef.current,
+        images: imagesRef.current,
         timeSeconds: (now - start) / 1000,
-        playbackSeconds: audioElRef.current?.current?.currentTime ?? 0,
+        playbackSeconds: audio?.currentTime ?? 0,
+        durationSeconds: duration,
         lines: linesRef.current,
       });
       raf = requestAnimationFrame(loop);
