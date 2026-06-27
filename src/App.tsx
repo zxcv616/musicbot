@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   segmentsToLines,
   transcribe,
   type TranscriptionResult,
 } from "./transcription";
 import { MoodPreview } from "./MoodPreview";
+import { LyricEditor, type EditableLine } from "./LyricEditor";
 
 function App() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -17,11 +18,22 @@ function App() {
   const [images, setImages] = useState<ImageBitmap[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // Lyric lines derived from the transcription, synced by word-level timing.
-  const lines = useMemo(
-    () => (result ? segmentsToLines(result) : []),
-    [result],
-  );
+  // Editable lyric lines, seeded from the transcription (word-level timing) and
+  // then refined in the editor. Drives the preview directly.
+  const [lines, setLines] = useState<EditableLine[]>([]);
+  useEffect(() => {
+    if (!result) return;
+    setLines(
+      segmentsToLines(result).map((l) => ({ ...l, id: crypto.randomUUID() })),
+    );
+  }, [result]);
+
+  function playFrom(seconds: number) {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.currentTime = seconds;
+    void audio.play();
+  }
 
   // Revoke the object URL when it changes or on unmount to avoid leaks.
   useEffect(() => {
@@ -148,23 +160,13 @@ function App() {
         )}
 
         {result && (
-          <section className="flex flex-col gap-3">
-            <p className="text-xs text-neutral-500">
-              {result.engine} · model {result.model} · {result.language} ·{" "}
-              {result.duration}s
-            </p>
-            <div className="flex flex-col gap-2">
-              {result.segments.map((seg) => (
-                <p key={seg.id} className="text-base leading-relaxed">
-                  <span className="text-neutral-600 text-xs mr-2 tabular-nums">
-                    {seg.start.toFixed(1)}s
-                  </span>
-                  {seg.text}
-                </p>
-              ))}
-            </div>
-          </section>
+          <p className="text-xs text-neutral-500">
+            {result.engine} · model {result.model} · {result.language} ·{" "}
+            {result.duration}s
+          </p>
         )}
+
+        <LyricEditor lines={lines} onChange={setLines} onPlayFrom={playFrom} />
       </div>
     </div>
   );
