@@ -425,13 +425,14 @@ export class MoodRenderer {
     const tc = this.preset.text;
     const fontPx = (tc.fontSizeVh / 100) * height;
     const rowH = fontPx * tc.lineHeight;
+    // fonts.* are full CSS family stacks, used as-is.
     const family = tc.defaultFont === "serif" ? tc.fonts.serif : tc.fonts.sans;
     const maxWidth = width - 2 * (tc.horizontalPaddingVw / 100) * width;
     const centerX = width / 2;
     const anchorY = tc.verticalAnchor * height;
 
     ctx.save();
-    ctx.font = `${tc.fontWeight} ${fontPx}px "${family}", sans-serif`;
+    ctx.font = `${tc.fontWeight} ${fontPx}px ${family}`;
     // letterSpacing is a modern canvas property; cast for older lib typings.
     (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing =
       `${tc.letterSpacingEm}em`;
@@ -532,7 +533,14 @@ export class MoodRenderer {
     text: string,
     maxWidth: number,
   ): string[] {
-    const words = text.trim().split(/\s+/).filter(Boolean);
+    const transform = this.preset.text.textTransform;
+    const cased =
+      transform === "lowercase"
+        ? text.toLowerCase()
+        : transform === "uppercase"
+          ? text.toUpperCase()
+          : text;
+    const words = cased.trim().split(/\s+/).filter(Boolean);
     const rows: string[] = [];
     let cur = "";
     for (const w of words) {

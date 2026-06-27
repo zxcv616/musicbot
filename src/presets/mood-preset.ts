@@ -54,9 +54,9 @@ export interface BackgroundConfig {
 
 export interface TextConfig {
   // Two or three curated fonts ONLY. No giant font picker — curation is the product.
-  // Provide a clean sans as default and an elegant serif as the alternate.
+  // Each value is a full CSS font-family stack so it can fall back gracefully.
   fonts: {
-    sans: string;   // e.g. "Inter", weight handled below
+    sans: string;   // e.g. a tight Helvetica/Arial grotesque
     serif: string;  // e.g. "Fraunces" or "EB Garamond"
   };
   defaultFont: "sans" | "serif";
@@ -64,7 +64,8 @@ export interface TextConfig {
   fontWeight: number;          // e.g. 500
   fontSizeVh: number;          // font size as % of frame HEIGHT, so it scales with output
   lineHeight: number;          // multiplier
-  letterSpacingEm: number;     // tracking, in em
+  letterSpacingEm: number;     // tracking, in em (negative = letters nearly touching)
+  textTransform: "none" | "lowercase" | "uppercase"; // case treatment for lyrics
   color: string;               // off-white reads softer than pure #fff
   maxLinesVisible: 1 | 2;      // show current line, optionally next line dimmed
   nextLineOpacity: number;     // 0 if maxLinesVisible === 1
@@ -123,17 +124,19 @@ export const MOOD: LyricPreset = {
 
   text: {
     fonts: {
-      sans: "Inter",
-      serif: "Fraunces",
+      // "Brat"-style: a tight, neutral Helvetica/Arial grotesque.
+      sans: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      serif: '"Fraunces", Georgia, serif',
     },
     defaultFont: "sans",
     fontWeight: 500,
     fontSizeVh: 4.4,            // ~84px at 1920 tall
     lineHeight: 1.25,
-    letterSpacingEm: 0.01,
+    letterSpacingEm: -0.02,     // tight tracking — letters nearly touching
+    textTransform: "lowercase", // Brat aesthetic: all lowercase
     color: "#F4F1EA",          // warm off-white
-    maxLinesVisible: 2,
-    nextLineOpacity: 0.28,
+    maxLinesVisible: 1,        // one lyric line at a time
+    nextLineOpacity: 0,        // no dimmed next line
     textAlign: "center",
     verticalAnchor: 0.56,
     horizontalPaddingVw: 10,
@@ -145,7 +148,7 @@ export const MOOD: LyricPreset = {
 
   motion: {
     kenBurns: {
-      enabled: true,
+      enabled: false,           // background image is completely still
       zoomFrom: 1.0,
       zoomTo: 1.08,
       panXvw: 2,
