@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { transcribe, type TranscriptionResult } from "./transcription";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  segmentsToLines,
+  transcribe,
+  type TranscriptionResult,
+} from "./transcription";
 import { MoodPreview } from "./MoodPreview";
 
 function App() {
@@ -12,6 +16,12 @@ function App() {
   const [result, setResult] = useState<TranscriptionResult | null>(null);
   const [image, setImage] = useState<ImageBitmap | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // Lyric lines derived from the transcription, synced by word-level timing.
+  const lines = useMemo(
+    () => (result ? segmentsToLines(result) : []),
+    [result],
+  );
 
   // Revoke the object URL when it changes or on unmount to avoid leaks.
   useEffect(() => {
@@ -89,7 +99,12 @@ function App() {
             />
             <span className="text-xs text-neutral-500">Click to browse</span>
           </label>
-          <MoodPreview image={image} />
+          <MoodPreview image={image} lines={lines} audioRef={audioRef} />
+          {lines.length > 0 && (
+            <p className="text-xs text-neutral-500 text-center">
+              Press play below — lyrics sync to the audio.
+            </p>
+          )}
         </div>
 
         <label className="flex flex-col items-center gap-3 border border-dashed border-neutral-700 rounded-xl p-8 cursor-pointer hover:border-neutral-500 transition-colors">

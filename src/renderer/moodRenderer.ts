@@ -17,11 +17,22 @@ import type { LyricPreset } from "../presets/mood-preset";
 
 export type FrameImage = HTMLImageElement | ImageBitmap;
 
+/** A single lyric line with its timing (seconds), derived from transcription. */
+export interface LyricLine {
+  text: string;
+  start: number;
+  end: number;
+}
+
 export interface FrameInputs {
   /** The (single, for now) background image, or null for a black frame. */
   image: FrameImage | null;
-  /** Playback/animation time in seconds. Drives the animated grain. */
+  /** Free-running animation clock in seconds. Drives the animated grain. */
   timeSeconds: number;
+  /** Audio playback position in seconds. Drives lyric line sync. */
+  playbackSeconds?: number;
+  /** Lyric lines to display, in order. Empty/omitted = no text. */
+  lines?: LyricLine[];
 }
 
 export class MoodRenderer {
@@ -65,6 +76,9 @@ export class MoodRenderer {
     this.applyVignette(ctx, width, height);
     this.applyGradients(ctx, width, height);
     this.applyGrain(ctx, width, height, inputs.timeSeconds);
+
+    // Text sits on top of the grain so lyrics stay crisp and legible.
+    this.drawText(ctx, width, height, inputs);
 
     // Leave state clean for the next caller.
     ctx.globalAlpha = 1;
@@ -262,6 +276,152 @@ export class MoodRenderer {
     this.grainTiles = tiles;
     this.grainForSize = { w: width, h: height };
   }
+
+  // --- Lyric text ----------------------------------------------------------
+
+  private drawText(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    inputs: FrameInputs,
+  ): void {
+    const lines = inputs.lines;
+    if (!lines || lines.length === 0) return;
+    const t = inputs.playbackSeconds ?? 0;
+
+    const tc = this.preset.text;
+    const fontPx = (tc.fontSizeVh / 100) * height;
+    const rowH = fontPx * tc.lineHeight;
+    const family = tc.defaultFont === "serif" ? tc.fonts.serif : tc.fonts.sans;
+    const maxWidth = width - 2 * (tc.horizontalPaddingVw / 100) * width;
+    const centerX = width / 2;
+    const anchorY = tc.verticalAnchor * height;
+
+    ctx.save();
+    ctx.font = `${tc.fontWeight} ${fontPx}px "${family}", sans-serif`;
+    // letterSpacing is a modern canvas property; cast for older lib typings.
+    (ctx as CanvasRenderingContext2D & { letterSpacing: string }).letterSpacing =
+      `${tc.letterSpacingEm}em`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // Active line = the most recent line whose start has passed.
+    let activeIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].start <= t) activeIndex = i;
+      else break;
+    }
+    if (activeIndex < 0) {
+      ctx.restore();
+      return; // nothing has started yet
+    }
+
+    const fadeIn = Math.max(tc.lineIn.fadeMs / 1000, 1e-3);
+    const fadeOut = Math.max(tc.lineOut.fadeMs / 1000, 1e-3);
+    const risePx = (tc.lineIn.riseVh / 100) * height;
+
+    const active = lines[activeIndex];
+    const inP = clamp((t - active.start) / fadeIn, 0, 1);
+    const activeAlpha = inP;
+    const activeRise = (1 - easeOutCubic(inP)) * risePx;
+
+    // Previous line fades out in place as the new one enters → soft crossfade.
+    if (activeIndex > 0) {
+      const outP = clamp((t - active.start) / fadeOut, 0, 1);
+      const prevAlpha = 1 - outP;
+      if (prevAlpha > 0.001) {
+        const prevRows = this.wrapText(ctx, lines[activeIndex - 1].text, maxWidth);
+        this.drawTextBlock(ctx, prevRows, centerX, anchorY, 0, rowH, prevAlpha);
+      }
+    }
+
+    // Active (current) line — full colour, with fade + rise entrance.
+    const activeRows = this.wrapText(ctx, active.text, maxWidth);
+    const activeBottom = this.drawTextBlock(
+      ctx,
+      activeRows,
+      centerX,
+      anchorY,
+      activeRise,
+      rowH,
+      activeAlpha,
+    );
+
+    // Next line, dimmed, sitting just below the current line.
+    if (tc.maxLinesVisible === 2 && activeIndex + 1 < lines.length) {
+      const nextRows = this.wrapText(ctx, lines[activeIndex + 1].text, maxWidth);
+      const nextAlpha = tc.nextLineOpacity * activeAlpha;
+      if (nextAlpha > 0.001) {
+        const gap = rowH * 0.35;
+        const nextCenterY = activeBottom + gap + (nextRows.length * rowH) / 2;
+        this.drawTextBlock(ctx, nextRows, centerX, nextCenterY, 0, rowH, nextAlpha);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /** Draw a block of pre-wrapped rows centred at centerY (+ yShift). Returns block bottom. */
+  private drawTextBlock(
+    ctx: CanvasRenderingContext2D,
+    rows: string[],
+    centerX: number,
+    centerY: number,
+    yShift: number,
+    rowH: number,
+    alpha: number,
+  ): number {
+    const tc = this.preset.text;
+    const total = rows.length * rowH;
+    const top = centerY + yShift - total / 2;
+
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = tc.color;
+    // Soft glow (zero offset + blur) for legibility over any background.
+    ctx.shadowColor = hexToRgba(tc.shadow.color, tc.shadow.opacity);
+    ctx.shadowBlur = tc.shadow.blur;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+
+    for (let i = 0; i < rows.length; i++) {
+      ctx.fillText(rows[i], centerX, top + rowH * (i + 0.5));
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.shadowColor = "rgba(0,0,0,0)";
+    ctx.shadowBlur = 0;
+    return centerY + yShift + total / 2;
+  }
+
+  /** Greedy word-wrap to fit maxWidth using the context's current font. */
+  private wrapText(
+    ctx: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+  ): string[] {
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    const rows: string[] = [];
+    let cur = "";
+    for (const w of words) {
+      const test = cur ? `${cur} ${w}` : w;
+      if (cur && ctx.measureText(test).width > maxWidth) {
+        rows.push(cur);
+        cur = w;
+      } else {
+        cur = test;
+      }
+    }
+    if (cur) rows.push(cur);
+    return rows.length ? rows : [""];
+  }
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+function easeOutCubic(p: number): number {
+  return 1 - Math.pow(1 - p, 3);
 }
 
 function hexToRgba(hex: string, alpha: number): string {

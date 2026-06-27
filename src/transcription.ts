@@ -1,5 +1,7 @@
 // Types + client for the local Whisper transcription backend (Milestone 1).
 
+import type { LyricLine } from "./renderer/moodRenderer";
+
 export interface Word {
   word: string;
   start: number;
@@ -21,6 +23,21 @@ export interface TranscriptionResult {
   language: string;
   duration: number;
   segments: Segment[];
+}
+
+/**
+ * Turn transcription segments into lyric lines for the renderer. Line timing is
+ * taken from the first/last word-level timestamps (falling back to the segment
+ * bounds), so display sync is driven by the word timings.
+ */
+export function segmentsToLines(result: TranscriptionResult): LyricLine[] {
+  return result.segments
+    .map((seg) => {
+      const start = seg.words[0]?.start ?? seg.start;
+      const end = seg.words[seg.words.length - 1]?.end ?? seg.end;
+      return { text: seg.text, start, end };
+    })
+    .filter((line) => line.text.length > 0);
 }
 
 export async function transcribe(file: File): Promise<TranscriptionResult> {
