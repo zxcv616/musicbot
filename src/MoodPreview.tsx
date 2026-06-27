@@ -41,6 +41,9 @@ export function MoodPreview({ images, lines, audioRef }: MoodPreviewProps) {
     const renderer = new MoodRenderer(MOOD);
     renderer.sizeCanvas(canvas);
 
+    // Ensure the bundled Brat font is loaded so the canvas never falls back.
+    void document.fonts.load(`${MOOD.text.fontWeight} 84px "Arimo"`);
+
     let raf = 0;
     const start = performance.now();
     const loop = (now: number) => {

@@ -65,6 +65,7 @@ export interface TextConfig {
   fontSizeVh: number;          // font size as % of frame HEIGHT, so it scales with output
   lineHeight: number;          // multiplier
   letterSpacingEm: number;     // tracking, in em (negative = letters nearly touching)
+  horizontalScale: number;     // canvas X-scale on text; >1 = stretched-wide (Brat) feel
   textTransform: "none" | "lowercase" | "uppercase"; // case treatment for lyrics
   color: string;               // off-white reads softer than pure #fff
   maxLinesVisible: 1 | 2;      // show current line, optionally next line dimmed
@@ -124,15 +125,16 @@ export const MOOD: LyricPreset = {
 
   text: {
     fonts: {
-      // "Brat"-style: a tight, neutral Helvetica/Arial grotesque.
-      sans: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+      // "Brat"-style: Arial via Arimo (bundled, metric-compatible, deterministic).
+      sans: '"Arimo", Arial, Helvetica, sans-serif',
       serif: '"Fraunces", Georgia, serif',
     },
     defaultFont: "sans",
-    fontWeight: 500,
+    fontWeight: 700,           // Brat is bold/black, not medium
     fontSizeVh: 4.4,            // ~84px at 1920 tall
     lineHeight: 1.25,
-    letterSpacingEm: -0.02,     // tight tracking — letters nearly touching
+    letterSpacingEm: -0.04,     // very tight tracking — letters crammed together
+    horizontalScale: 1.12,      // stretched-wide Brat feel
     textTransform: "lowercase", // Brat aesthetic: all lowercase
     color: "#F4F1EA",          // warm off-white
     maxLinesVisible: 1,        // one lyric line at a time
@@ -141,8 +143,8 @@ export const MOOD: LyricPreset = {
     verticalAnchor: 0.56,
     horizontalPaddingVw: 10,
     shadow: { color: "#000000", blur: 24, opacity: 0.45 },
-    lineIn:  { fadeMs: 420, riseVh: 1.2 },
-    lineOut: { fadeMs: 280 },
+    lineIn:  { fadeMs: 0, riseVh: 0 },  // hard cut in — no fade, no rise
+    lineOut: { fadeMs: 0 },             // hard cut out — no fade
     wordHighlight: { enabled: false, activeColor: "#FFFFFF", inactiveOpacity: 0.55 },
   },
 

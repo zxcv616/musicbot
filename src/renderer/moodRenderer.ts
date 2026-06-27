@@ -450,27 +450,37 @@ export class MoodRenderer {
       return; // nothing has started yet
     }
 
-    const fadeIn = Math.max(tc.lineIn.fadeMs / 1000, 1e-3);
-    const fadeOut = Math.max(tc.lineOut.fadeMs / 1000, 1e-3);
+    const fadeInMs = tc.lineIn.fadeMs;
+    const fadeOutMs = tc.lineOut.fadeMs;
     const risePx = (tc.lineIn.riseVh / 100) * height;
+    // Text is stretched by horizontalScale when drawn, so wrap against the
+    // padding-limited width divided by that scale.
+    const wrapWidth = maxWidth / tc.horizontalScale;
 
     const active = lines[activeIndex];
-    const inP = clamp((t - active.start) / fadeIn, 0, 1);
-    const activeAlpha = inP;
-    const activeRise = (1 - easeOutCubic(inP)) * risePx;
 
-    // Previous line fades out in place as the new one enters → soft crossfade.
-    if (activeIndex > 0) {
-      const outP = clamp((t - active.start) / fadeOut, 0, 1);
+    // Entrance: hard cut when fadeMs is 0, otherwise fade + rise in.
+    let activeAlpha = 1;
+    let activeRise = 0;
+    if (fadeInMs > 0) {
+      const inP = clamp((t - active.start) / (fadeInMs / 1000), 0, 1);
+      activeAlpha = inP;
+      activeRise = (1 - easeOutCubic(inP)) * risePx;
+    }
+
+    // Exit: only crossfade the previous line out if a fade-out is configured.
+    // With fadeOut = 0 the previous line is simply gone (hard cut).
+    if (fadeOutMs > 0 && activeIndex > 0) {
+      const outP = clamp((t - active.start) / (fadeOutMs / 1000), 0, 1);
       const prevAlpha = 1 - outP;
       if (prevAlpha > 0.001) {
-        const prevRows = this.wrapText(ctx, lines[activeIndex - 1].text, maxWidth);
+        const prevRows = this.wrapText(ctx, lines[activeIndex - 1].text, wrapWidth);
         this.drawTextBlock(ctx, prevRows, centerX, anchorY, 0, rowH, prevAlpha);
       }
     }
 
-    // Active (current) line — full colour, with fade + rise entrance.
-    const activeRows = this.wrapText(ctx, active.text, maxWidth);
+    // Active (current) line.
+    const activeRows = this.wrapText(ctx, active.text, wrapWidth);
     const activeBottom = this.drawTextBlock(
       ctx,
       activeRows,
@@ -483,7 +493,7 @@ export class MoodRenderer {
 
     // Next line, dimmed, sitting just below the current line.
     if (tc.maxLinesVisible === 2 && activeIndex + 1 < lines.length) {
-      const nextRows = this.wrapText(ctx, lines[activeIndex + 1].text, maxWidth);
+      const nextRows = this.wrapText(ctx, lines[activeIndex + 1].text, wrapWidth);
       const nextAlpha = tc.nextLineOpacity * activeAlpha;
       if (nextAlpha > 0.001) {
         const gap = rowH * 0.35;
@@ -509,6 +519,11 @@ export class MoodRenderer {
     const total = rows.length * rowH;
     const top = centerY + yShift - total / 2;
 
+    // Stretch horizontally around the centre line for the wide Brat feel.
+    ctx.save();
+    ctx.translate(centerX, 0);
+    ctx.scale(tc.horizontalScale, 1);
+
     ctx.globalAlpha = alpha;
     ctx.fillStyle = tc.color;
     // Soft glow (zero offset + blur) for legibility over any background.
@@ -517,13 +532,12 @@ export class MoodRenderer {
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
 
+    // textAlign is "center", so draw at x = 0 (the translated centre).
     for (let i = 0; i < rows.length; i++) {
-      ctx.fillText(rows[i], centerX, top + rowH * (i + 0.5));
+      ctx.fillText(rows[i], 0, top + rowH * (i + 0.5));
     }
 
-    ctx.globalAlpha = 1;
-    ctx.shadowColor = "rgba(0,0,0,0)";
-    ctx.shadowBlur = 0;
+    ctx.restore();
     return centerY + yShift + total / 2;
   }
 
