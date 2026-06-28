@@ -90,6 +90,13 @@ export class MoodRenderer {
     ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, width, height);
 
+    // Solid-colour backdrop (e.g. Brat lime). Drawn before media so uploaded
+    // images/videos appear on top of it when present.
+    if (this.preset.background.solidColor) {
+      ctx.fillStyle = this.preset.background.solidColor;
+      ctx.fillRect(0, 0, width, height);
+    }
+
     this.drawBackground(ctx, width, height, inputs);
 
     this.applyTint(ctx, width, height);
@@ -538,12 +545,15 @@ export class MoodRenderer {
 
     // Exit: only crossfade the previous line out if a fade-out is configured.
     // With fadeOut = 0 the previous line is simply gone (hard cut).
+    // Blur: fraction of font size → absolute pixels at this resolution.
+    const blurPx = (tc.blurFontFrac ?? 0) * fontPx;
+
     if (fadeOutMs > 0 && activeIndex > 0) {
       const outP = clamp((t - active.start) / (fadeOutMs / 1000), 0, 1);
       const prevAlpha = 1 - outP;
       if (prevAlpha > 0.001) {
         const prevRows = this.wrapText(ctx, lines[activeIndex - 1].text, wrapWidth);
-        this.drawTextBlock(ctx, prevRows, centerX, anchorY, 0, rowH, prevAlpha);
+        this.drawTextBlock(ctx, prevRows, centerX, anchorY, 0, rowH, prevAlpha, blurPx);
       }
     }
 
@@ -557,6 +567,7 @@ export class MoodRenderer {
       activeRise,
       rowH,
       activeAlpha,
+      blurPx,
     );
 
     // Next line, dimmed, sitting just below the current line.
@@ -566,14 +577,19 @@ export class MoodRenderer {
       if (nextAlpha > 0.001) {
         const gap = rowH * 0.35;
         const nextCenterY = activeBottom + gap + (nextRows.length * rowH) / 2;
-        this.drawTextBlock(ctx, nextRows, centerX, nextCenterY, 0, rowH, nextAlpha);
+        this.drawTextBlock(ctx, nextRows, centerX, nextCenterY, 0, rowH, nextAlpha, blurPx);
       }
     }
 
     ctx.restore();
   }
 
-  /** Draw a block of pre-wrapped rows centred at centerY (+ yShift). Returns block bottom. */
+  /**
+   * Draw a block of pre-wrapped rows centred at (centerX, centerY + yShift).
+   * Applies horizontalScale (X) and verticalScale (Y) anchored at that centre
+   * so the block expands/contracts symmetrically. Returns block bottom in
+   * screen-space pixels (accounting for vertical scale).
+   */
   private drawTextBlock(
     ctx: CanvasRenderingContext2D,
     rows: string[],
@@ -582,40 +598,48 @@ export class MoodRenderer {
     yShift: number,
     rowH: number,
     alpha: number,
+    blurPx: number,
   ): number {
     const tc = this.preset.text;
     const total = rows.length * rowH;
-    const top = centerY + yShift - total / 2;
+    const vy = tc.verticalScale ?? 1;
 
-    // Stretch horizontally around the centre line for the wide Brat feel.
+    // Translate to the visual centre of the text block, then apply both scales.
+    // Drawing at y ∈ (-total/2 .. total/2) around the origin keeps the block
+    // anchored at (centerX, centerY+yShift) regardless of vy.
     ctx.save();
-    ctx.translate(centerX, 0);
-    ctx.scale(tc.horizontalScale, 1);
+    ctx.translate(centerX, centerY + yShift);
+    ctx.scale(tc.horizontalScale, vy);
 
     ctx.globalAlpha = alpha;
     ctx.fillStyle = tc.color;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
 
+    if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
+
     // textAlign is "center", so draw at x = 0 (the translated centre).
     const drawRows = () => {
       for (let i = 0; i < rows.length; i++) {
-        ctx.fillText(rows[i], 0, top + rowH * (i + 0.5));
+        ctx.fillText(rows[i], 0, -total / 2 + rowH * (i + 0.5));
       }
     };
 
-    // Two soft dark passes build a legibility halo that survives busy/bright
-    // images, then a final crisp pass with no shadow keeps the letters sharp.
-    ctx.shadowColor = hexToRgba(tc.shadow.color, tc.shadow.opacity);
-    ctx.shadowBlur = tc.shadow.blur;
-    drawRows();
-    drawRows();
-    ctx.shadowColor = "rgba(0,0,0,0)";
-    ctx.shadowBlur = 0;
+    if (tc.shadow.opacity > 0 && tc.shadow.blur > 0) {
+      // Two soft dark passes build a legibility halo that survives busy/bright
+      // images, then a final crisp pass with no shadow keeps the letters sharp.
+      ctx.shadowColor = hexToRgba(tc.shadow.color, tc.shadow.opacity);
+      ctx.shadowBlur = tc.shadow.blur;
+      drawRows();
+      drawRows();
+      ctx.shadowColor = "rgba(0,0,0,0)";
+      ctx.shadowBlur = 0;
+    }
     drawRows();
 
     ctx.restore();
-    return centerY + yShift + total / 2;
+    // Screen-space bottom accounts for vertical scale.
+    return (centerY + yShift) + (total / 2) * vy;
   }
 
   /** Greedy word-wrap to fit maxWidth using the context's current font. */

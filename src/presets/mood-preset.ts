@@ -50,6 +50,13 @@ export interface BackgroundConfig {
 
   // Crossfade when switching between multiple uploaded images.
   crossfadeSeconds: number;
+
+  /**
+   * When set, fill the frame with this flat colour before drawing any uploaded
+   * media. Gives non-photo aesthetics (e.g. Brat) a solid backdrop when no
+   * images/videos have been uploaded; uploaded media is drawn on top of it.
+   */
+  solidColor?: string;
 }
 
 export interface TextConfig {
@@ -66,7 +73,9 @@ export interface TextConfig {
                                // stays consistent across aspect ratios
   lineHeight: number;          // multiplier
   letterSpacingEm: number;     // tracking, in em (negative = letters nearly touching)
-  horizontalScale: number;     // canvas X-scale on text; >1 = stretched-wide (Brat) feel
+  horizontalScale: number;     // canvas X-scale on text; <1 = narrower, >1 = wider
+  verticalScale: number;       // canvas Y-scale on text; 1 = normal, >1 = taller/condensed
+  blurFontFrac: number;        // text softening blur as a fraction of fontPx (0 = none)
   textTransform: "none" | "lowercase" | "uppercase"; // case treatment for lyrics
   color: string;               // off-white reads softer than pure #fff
   maxLinesVisible: 1 | 2;      // show current line, optionally next line dimmed
@@ -141,6 +150,8 @@ export const MOOD: LyricPreset = {
     lineHeight: 1.14,           // tight Brat stack
     letterSpacingEm: -0.04,     // very tight tracking — letters crammed together
     horizontalScale: 1.12,      // stretched-wide Brat feel
+    verticalScale: 1,           // no vertical stretch
+    blurFontFrac: 0,            // no text blur
     textTransform: "lowercase", // Brat aesthetic: all lowercase
     color: "#F4F1EA",          // warm off-white
     maxLinesVisible: 1,        // one lyric line at a time

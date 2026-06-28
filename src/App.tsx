@@ -10,6 +10,10 @@ import { AudioPlayer } from "./AudioPlayer";
 import { exportMoodVideo, type ExportQuality } from "./renderer/exportVideo";
 import type { BackgroundMedia, VideoFit } from "./renderer/moodRenderer";
 import { MOOD, TEXT_COLOR_OPTIONS, ASPECT_OPTIONS } from "./presets/mood-preset";
+import { BRAT } from "./presets/brat-preset";
+import { buildEffectivePreset } from "./utils/presetUtils";
+
+const ALL_PRESETS = [MOOD, BRAT];
 
 function disposeMedia(items: BackgroundMedia[]): void {
   for (const m of items) {
@@ -33,26 +37,28 @@ function App() {
   const [media, setMedia] = useState<BackgroundMedia[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
 
-  // --- Style settings (driven through the Mood preset) ---
+  // --- Style settings (driven through the active preset) ---
+  const [presetIndex, setPresetIndex] = useState(0);
   const [colorIndex, setColorIndex] = useState(0);
   const [ratioIndex, setRatioIndex] = useState(0);
   // How a video clip shorter than its slot fills the gap (loop vs hold frame).
   const [videoFit, setVideoFit] = useState<VideoFit>("loop");
   const hasVideo = media.some((m) => m.kind === "video");
 
-  const effectivePreset = useMemo(() => {
-    const c = TEXT_COLOR_OPTIONS[colorIndex];
-    const a = ASPECT_OPTIONS[ratioIndex];
-    return {
-      ...MOOD,
-      output: { ...MOOD.output, width: a.width, height: a.height },
-      text: {
-        ...MOOD.text,
-        color: c.color,
-        shadow: { ...MOOD.text.shadow, color: c.haloColor, opacity: c.haloOpacity },
-      },
-    };
-  }, [colorIndex, ratioIndex]);
+  const effectivePreset = useMemo(
+    () => buildEffectivePreset(
+      ALL_PRESETS[presetIndex],
+      TEXT_COLOR_OPTIONS[colorIndex],
+      ASPECT_OPTIONS[ratioIndex],
+    ),
+    [presetIndex, colorIndex, ratioIndex],
+  );
+
+  // Reset text color to each preset's natural default when switching.
+  // Mood → Cream (index 0); Brat → Black (index 2, black on lime).
+  useEffect(() => {
+    setColorIndex(presetIndex === 1 ? 2 : 0);
+  }, [presetIndex]);
 
   // Editable lyric lines, seeded from the transcription (word-level timing) and
   // then refined in the editor. Drives the preview directly.
@@ -199,7 +205,9 @@ function App() {
     <div className="h-screen w-screen overflow-hidden bg-neutral-950 text-neutral-100 flex flex-col">
       <header className="shrink-0 px-5 py-3 border-b border-neutral-900 flex items-baseline gap-3">
         <h1 className="text-base font-semibold tracking-tight">Lyric Video</h1>
-        <span className="text-xs text-neutral-500">Mood preset · 9:16</span>
+        <span className="text-xs text-neutral-500">
+          {ALL_PRESETS[presetIndex].name} · {ASPECT_OPTIONS[ratioIndex].name}
+        </span>
       </header>
 
       <main className="flex-1 min-h-0 flex">
@@ -273,6 +281,27 @@ function App() {
               {status === "transcribing" ? "Transcribing…" : "Transcribe"}
             </button>
           )}
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+              Preset
+            </span>
+            <div className="flex gap-1.5">
+              {ALL_PRESETS.map((p, i) => (
+                <button
+                  key={p.id}
+                  onClick={() => setPresetIndex(i)}
+                  className={`flex-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                    i === presetIndex
+                      ? "bg-neutral-100 text-neutral-900"
+                      : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                  }`}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <span className="text-[11px] uppercase tracking-wide text-neutral-500">
