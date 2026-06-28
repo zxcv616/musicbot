@@ -50,7 +50,7 @@ export const BRAT: LyricPreset = {
     letterSpacingEm: -0.04,   // same tight tracking
     horizontalScale: 0.78,    // narrower than normal
     verticalScale: 1.45,      // significantly taller — the condensed Brat proportions
-    blurFontFrac: 0.04,       // ~4% of fontPx → soft chunky edge like a bad print
+    blurFontFrac: 0,          // no blur
     textTransform: "lowercase",
     color: "#121212",         // near-black on lime
     maxLinesVisible: 1,

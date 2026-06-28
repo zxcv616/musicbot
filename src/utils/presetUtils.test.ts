@@ -43,7 +43,7 @@ describe("buildEffectivePreset", () => {
     expect(ep.background.solidColor).toBe("#8ACE00");
     expect(ep.text.fontWeight).toBe(400);
     expect(ep.text.verticalScale).toBe(1.45);
-    expect(ep.text.blurFontFrac).toBe(0.04);
+    expect(ep.text.blurFontFrac).toBe(0);
     expect(ep.text.horizontalScale).toBe(0.78);
   });
 });
@@ -66,8 +66,8 @@ describe("BRAT preset values", () => {
     expect(BRAT.text.horizontalScale).toBeLessThan(1);
   });
 
-  it("has blur enabled and no shadow halo", () => {
-    expect(BRAT.text.blurFontFrac).toBeGreaterThan(0);
+  it("has no blur and no shadow halo", () => {
+    expect(BRAT.text.blurFontFrac).toBe(0);
     expect(BRAT.text.shadow.opacity).toBe(0);
   });
 
