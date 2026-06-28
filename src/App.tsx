@@ -7,7 +7,7 @@ import {
 import { MoodPreview } from "./MoodPreview";
 import { LyricEditor, type EditableLine } from "./LyricEditor";
 import { AudioPlayer } from "./AudioPlayer";
-import { exportMoodVideo } from "./renderer/exportVideo";
+import { exportMoodVideo, type ExportQuality } from "./renderer/exportVideo";
 import { MOOD, TEXT_COLOR_OPTIONS, ASPECT_OPTIONS } from "./presets/mood-preset";
 
 function App() {
@@ -56,8 +56,9 @@ function App() {
     void audio.play();
   }
 
-  const [exporting, setExporting] = useState(false);
+  const [exportMode, setExportMode] = useState<ExportQuality | null>(null);
   const [exportProgress, setExportProgress] = useState(0);
+  const exporting = exportMode !== null;
 
   const canExport =
     images.length > 0 &&
@@ -65,10 +66,10 @@ function App() {
     !!audioFile &&
     Number.isFinite(audioRef.current?.duration ?? NaN);
 
-  async function handleExport() {
+  async function handleExport(quality: ExportQuality) {
     const audio = audioRef.current;
     if (!audio || !audioFile || !Number.isFinite(audio.duration)) return;
-    setExporting(true);
+    setExportMode(quality);
     setExportProgress(0);
     try {
       const blob = await exportMoodVideo({
@@ -77,18 +78,19 @@ function App() {
         lines,
         audioFile,
         durationSeconds: audio.duration,
+        quality,
         onProgress: setExportProgress,
       });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "lyric-video.mp4";
+      a.download = `lyric-video${quality === "draft" ? "-draft" : ""}.mp4`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setExporting(false);
+      setExportMode(null);
     }
   }
 
@@ -257,15 +259,28 @@ function App() {
 
           {/* Export pinned to the bottom of the controls column. */}
           <div className="mt-auto flex flex-col gap-2">
-            <button
-              onClick={handleExport}
-              disabled={!canExport || exporting}
-              className="rounded-lg bg-emerald-500 text-neutral-950 px-4 py-2 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              {exporting
-                ? `Exporting… ${Math.round(exportProgress * 100)}%`
-                : "Export MP4"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleExport("draft")}
+                disabled={!canExport || exporting}
+                title="Half-resolution, fast encode — quick timing/vibe check"
+                className="flex-1 rounded-lg bg-neutral-800 text-neutral-100 px-3 py-2 text-sm font-medium hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {exportMode === "draft"
+                  ? `Draft… ${Math.round(exportProgress * 100)}%`
+                  : "Draft (fast)"}
+              </button>
+              <button
+                onClick={() => handleExport("full")}
+                disabled={!canExport || exporting}
+                title="Full resolution, best quality"
+                className="flex-1 rounded-lg bg-emerald-500 text-neutral-950 px-3 py-2 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                {exportMode === "full"
+                  ? `Full… ${Math.round(exportProgress * 100)}%`
+                  : "Full quality"}
+              </button>
+            </div>
             {exporting && (
               <div className="h-1.5 w-full rounded bg-neutral-800 overflow-hidden">
                 <div
@@ -276,7 +291,7 @@ function App() {
             )}
             <p className="text-[11px] text-neutral-600 leading-snug">
               {canExport
-                ? "1080×1920 · 30fps · audio muxed"
+                ? `${ASPECT_OPTIONS[ratioIndex].name} · 30fps · audio muxed · draft is half-res`
                 : "Add audio, images & lyrics to export"}
             </p>
           </div>

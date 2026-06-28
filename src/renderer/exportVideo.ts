@@ -19,15 +19,21 @@ import { MoodRenderer, type FrameImage, type LyricLine } from "./moodRenderer";
 // imports the core and reads its default export).
 const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm";
 
+export type ExportQuality = "draft" | "full";
+
 export interface ExportOptions {
   preset: LyricPreset;
   images: FrameImage[];
   lines: LyricLine[];
   audioFile: File;
   durationSeconds: number;
+  /** "draft" = half-resolution + ultrafast encode for a quick check. */
+  quality?: ExportQuality;
   /** 0..1 across render + encode. */
   onProgress?: (fraction: number) => void;
 }
+
+const evenize = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
 function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
@@ -44,9 +50,25 @@ function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
 
 export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
   const { preset, images, lines, audioFile, durationSeconds, onProgress } = opts;
-  const { width, height, fps } = preset.output;
+  const quality: ExportQuality = opts.quality ?? "full";
 
-  // Offscreen render target at the true output resolution.
+  // Draft renders at half resolution for a quick timing/vibe check; full uses
+  // the chosen output resolution. Same composition either way.
+  const scale = quality === "draft" ? 0.5 : 1;
+  const renderPreset =
+    scale === 1
+      ? preset
+      : {
+          ...preset,
+          output: {
+            ...preset.output,
+            width: evenize(preset.output.width * scale),
+            height: evenize(preset.output.height * scale),
+          },
+        };
+  const { width, height, fps } = renderPreset.output;
+
+  // Offscreen render target at the (effective) output resolution.
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
@@ -54,7 +76,7 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
   if (!ctx) throw new Error("Could not get 2D context");
 
   // Same renderer instance type as the preview — identical code path.
-  const renderer = new MoodRenderer(preset);
+  const renderer = new MoodRenderer(renderPreset);
 
   // Make sure the bundled font is ready so frames aren't rendered with a fallback.
   await document.fonts.load(`${preset.text.fontWeight} 84px "Arimo"`);
@@ -92,13 +114,18 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
     onProgress?.(0.8 + Math.min(Math.max(progress, 0), 1) * 0.2);
   });
 
+  // Draft favours speed (ultrafast/higher CRF); full favours quality.
+  const x264 =
+    quality === "draft"
+      ? ["-preset", "ultrafast", "-crf", "30"]
+      : ["-preset", "veryfast", "-crf", "20"];
+
   await ffmpeg.exec([
     "-framerate", String(fps),
     "-i", "frame_%05d.jpg",
     "-i", audioName,
     "-c:v", "libx264",
-    "-preset", "veryfast",
-    "-crf", "20",
+    ...x264,
     "-pix_fmt", "yuv420p",
     "-c:a", "aac",
     "-b:a", "192k",
