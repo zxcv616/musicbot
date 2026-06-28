@@ -78,9 +78,11 @@ export function LyricEditor({ lines, onChange, onPlayFrom }: LyricEditorProps) {
   if (lines.length === 0) return null;
 
   return (
-    <section className="flex flex-col gap-2">
-      <h2 className="text-sm font-medium text-neutral-300">Lyrics &amp; timing</h2>
-      <div className="flex flex-col gap-2 max-h-[50vh] overflow-y-auto pr-1">
+    <section className="flex flex-col gap-2 h-full min-h-0">
+      <h2 className="text-sm font-medium text-neutral-300 shrink-0">
+        Lyrics &amp; timing
+      </h2>
+      <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto pr-1">
         {lines.map((line, i) => (
           <div
             key={line.id}

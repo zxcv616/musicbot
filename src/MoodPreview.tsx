@@ -67,8 +67,9 @@ export function MoodPreview({ images, lines, audioRef }: MoodPreviewProps) {
   return (
     <canvas
       ref={canvasRef}
-      className="block w-auto h-[70vh] max-w-full rounded-lg shadow-2xl mx-auto"
-      style={{ aspectRatio: `${MOOD.output.width} / ${MOOD.output.height}` }}
+      // Intrinsic 1080×1920 scaled down to fit the container (contain), so the
+      // 9:16 preview fills whichever dimension is the constraint.
+      className="block max-h-full max-w-full rounded-xl shadow-2xl"
     />
   );
 }
