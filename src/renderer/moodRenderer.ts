@@ -17,6 +17,17 @@ import type { LyricPreset } from "../presets/mood-preset";
 
 export type FrameImage = HTMLImageElement | ImageBitmap;
 
+/** How a video clip shorter than its slot fills the remaining time. */
+export type VideoFit = "loop" | "freeze";
+
+/**
+ * A background media item: a still image or a video clip. Images and videos can
+ * be mixed; each takes one slot in the schedule (like image crossfades).
+ */
+export type BackgroundMedia =
+  | { kind: "image"; image: FrameImage }
+  | { kind: "video"; video: HTMLVideoElement; duration: number; fit: VideoFit };
+
 /** A single lyric line with its timing (seconds), derived from transcription. */
 export interface LyricLine {
   text: string;
@@ -24,14 +35,22 @@ export interface LyricLine {
   end: number;
 }
 
+/** One media item's window on the song timeline. */
+export interface ScheduleEntry {
+  start: number;
+  end: number;
+  /** When the item first becomes visible (its crossfade-in start). */
+  motionStart: number;
+}
+
 export interface FrameInputs {
-  /** Background images, in order. Empty = black frame. */
-  images: FrameImage[];
+  /** Background media (images and/or videos), in order. Empty = black frame. */
+  media: BackgroundMedia[];
   /** Free-running animation clock in seconds. Drives the animated grain. */
   timeSeconds: number;
   /** Audio playback position in seconds. Drives lyric sync, motion, crossfades. */
   playbackSeconds?: number;
-  /** Total song length in seconds, used to spread images across the song. */
+  /** Total song length in seconds, used to spread media across the song. */
   durationSeconds?: number;
   /** Lyric lines to display, in order. Empty/omitted = no text. */
   lines?: LyricLine[];
@@ -88,7 +107,7 @@ export class MoodRenderer {
     ctx.filter = "none";
   }
 
-  // --- Background: multi-image crossfade + Ken-Burns drift ----------------
+  // --- Background: multi-media crossfade + Ken-Burns drift ----------------
 
   private drawBackground(
     ctx: CanvasRenderingContext2D,
@@ -96,54 +115,73 @@ export class MoodRenderer {
     height: number,
     inputs: FrameInputs,
   ): void {
-    const images = inputs.images;
-    if (images.length === 0) return;
+    const media = inputs.media;
+    if (!media || media.length === 0) return;
     const t = inputs.playbackSeconds ?? 0;
 
-    const schedule = this.computeSchedule(images.length, inputs);
+    const schedule = this.getSchedule(media.length, inputs.durationSeconds, inputs.lines);
 
-    // Primary image = the one whose window contains t.
+    // Draw the visible layer(s): the primary item, plus the incoming item during
+    // a crossfade (drawn over it at ramping alpha = true dissolve).
+    for (const layer of this.visibleAt(t, schedule)) {
+      const entry = schedule[layer.index];
+      this.drawMediaItem(
+        ctx,
+        media[layer.index],
+        width,
+        height,
+        t - entry.motionStart,
+        layer.alpha,
+      );
+    }
+  }
+
+  /**
+   * Which media item(s) are on screen at time t, with their alpha. One entry,
+   * or two during a crossfade (the second is the incoming item). Public so the
+   * live preview / export can drive each video element to the same schedule.
+   */
+  visibleAt(t: number, schedule: ScheduleEntry[]): { index: number; alpha: number }[] {
     let i = 0;
     for (let k = 0; k < schedule.length; k++) {
       if (t >= schedule[k].start) i = k;
       else break;
     }
-    const seg = schedule[i];
-
-    // Draw the primary image fully opaque, with its own Ken-Burns drift.
-    this.drawKenBurnsImage(ctx, images[i], width, height, t - seg.motionStart, 1);
-
-    // Crossfade into the next image over the last `crossfadeSeconds` of the
-    // window. Drawing the incoming image at ramping alpha over the opaque
-    // outgoing one is a true dissolve (out·(1−p) + in·p).
+    const layers = [{ index: i, alpha: 1 }];
     const cf = this.preset.background.crossfadeSeconds;
-    if (i + 1 < images.length && cf > 0) {
-      const cfStart = seg.end - cf;
+    if (i + 1 < schedule.length && cf > 0) {
+      const cfStart = schedule[i].end - cf;
       if (t >= cfStart) {
-        const p = clamp((t - cfStart) / cf, 0, 1);
-        const next = schedule[i + 1];
-        this.drawKenBurnsImage(
-          ctx,
-          images[i + 1],
-          width,
-          height,
-          t - next.motionStart,
-          p,
-        );
+        layers.push({ index: i + 1, alpha: clamp((t - cfStart) / cf, 0, 1) });
       }
     }
+    return layers;
   }
 
-  /** Even-spaced image windows across the song, snapped to lyric line starts. */
-  private computeSchedule(
+  /**
+   * The local time within a clip to display at song time t, honouring loop vs
+   * freeze. Long clips clamp ("cut to fit from the start"); short clips loop or
+   * freeze. Shared by the preview (seek/play) and the export (frame-accurate).
+   */
+  clipLocalTime(entry: ScheduleEntry, duration: number, fit: VideoFit, t: number): number {
+    let local = Math.max(0, t - entry.motionStart);
+    if (duration <= 0) return 0;
+    if (fit === "loop") return local % duration;
+    // freeze / cut: hold at the last frame once past the clip's end.
+    return Math.min(local, Math.max(0, duration - 1 / this.preset.output.fps));
+  }
+
+  /** Even-spaced media windows across the song, snapped to lyric line starts. */
+  getSchedule(
     count: number,
-    inputs: FrameInputs,
-  ): { start: number; end: number; motionStart: number }[] {
+    durationSeconds?: number,
+    linesArg?: LyricLine[],
+  ): ScheduleEntry[] {
     const cf = this.preset.background.crossfadeSeconds;
-    const lines = inputs.lines ?? [];
+    const lines = linesArg ?? [];
     const duration =
-      inputs.durationSeconds && inputs.durationSeconds > 0
-        ? inputs.durationSeconds
+      durationSeconds && durationSeconds > 0
+        ? durationSeconds
         : lines.length > 0
           ? lines[lines.length - 1].end
           : 0;
@@ -195,9 +233,9 @@ export class MoodRenderer {
   }
 
   /** Center-crop "cover" fill + colour grade, with optional Ken-Burns drift. */
-  private drawKenBurnsImage(
+  private drawMediaItem(
     ctx: CanvasRenderingContext2D,
-    image: FrameImage,
+    item: BackgroundMedia,
     width: number,
     height: number,
     localTime: number,
@@ -205,8 +243,15 @@ export class MoodRenderer {
   ): void {
     const bg = this.preset.background;
     const kb = this.preset.motion.kenBurns;
-    const iw = image.width;
-    const ih = image.height;
+
+    // The drawable source + its intrinsic size (videos expose videoWidth/Height,
+    // and aren't drawable until they have data).
+    const source: CanvasImageSource =
+      item.kind === "image" ? item.image : item.video;
+    const iw = item.kind === "image" ? item.image.width : item.video.videoWidth;
+    const ih = item.kind === "image" ? item.image.height : item.video.videoHeight;
+    if (!iw || !ih) return; // video not ready yet — leave the black base
+    if (item.kind === "video" && item.video.readyState < 2) return;
 
     // Cover scale: smallest scale that fills the frame.
     const coverScale = Math.max(width / iw, height / ih);
@@ -251,7 +296,7 @@ export class MoodRenderer {
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.filter = `saturate(${bg.saturation}) contrast(${bg.contrast}) brightness(${bg.brightness})`;
-    ctx.drawImage(image, dx, dy, drawW, drawH);
+    ctx.drawImage(source, dx, dy, drawW, drawH);
     ctx.restore();
   }
 

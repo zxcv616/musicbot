@@ -8,7 +8,19 @@ import { MoodPreview } from "./MoodPreview";
 import { LyricEditor, type EditableLine } from "./LyricEditor";
 import { AudioPlayer } from "./AudioPlayer";
 import { exportMoodVideo, type ExportQuality } from "./renderer/exportVideo";
+import type { BackgroundMedia, VideoFit } from "./renderer/moodRenderer";
 import { MOOD, TEXT_COLOR_OPTIONS, ASPECT_OPTIONS } from "./presets/mood-preset";
+
+function disposeMedia(items: BackgroundMedia[]): void {
+  for (const m of items) {
+    if (m.kind === "image") {
+      if ("close" in m.image) m.image.close();
+    } else {
+      m.video.pause();
+      URL.revokeObjectURL(m.video.src);
+    }
+  }
+}
 
 function App() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -18,12 +30,15 @@ function App() {
   );
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TranscriptionResult | null>(null);
-  const [images, setImages] = useState<ImageBitmap[]>([]);
+  const [media, setMedia] = useState<BackgroundMedia[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // --- Style settings (driven through the Mood preset) ---
   const [colorIndex, setColorIndex] = useState(0);
   const [ratioIndex, setRatioIndex] = useState(0);
+  // How a video clip shorter than its slot fills the gap (loop vs hold frame).
+  const [videoFit, setVideoFit] = useState<VideoFit>("loop");
+  const hasVideo = media.some((m) => m.kind === "video");
 
   const effectivePreset = useMemo(() => {
     const c = TEXT_COLOR_OPTIONS[colorIndex];
@@ -61,7 +76,7 @@ function App() {
   const exporting = exportMode !== null;
 
   const canExport =
-    images.length > 0 &&
+    media.length > 0 &&
     lines.length > 0 &&
     !!audioFile &&
     Number.isFinite(audioRef.current?.duration ?? NaN);
@@ -74,7 +89,7 @@ function App() {
     try {
       const blob = await exportMoodVideo({
         preset: effectivePreset,
-        images,
+        media,
         lines,
         audioFile,
         durationSeconds: audio.duration,
@@ -114,20 +129,51 @@ function App() {
     setStatus("idle");
   }
 
-  // Dispose decoded bitmaps on unmount to free memory.
-  useEffect(() => {
-    return () => {
-      images.forEach((b) => b.close());
-    };
-  }, [images]);
+  // Dispose media only on unmount (not on every change — videoFit remaps reuse
+  // the same elements). Replacement disposal happens in handleMediaChange.
+  const mediaRef = useRef<BackgroundMedia[]>([]);
+  mediaRef.current = media;
+  useEffect(() => () => disposeMedia(mediaRef.current), []);
 
-  async function handleImagesChange(e: React.ChangeEvent<HTMLInputElement>) {
+  // Apply the short-clip fit setting to already-loaded video clips.
+  useEffect(() => {
+    setMedia((prev) =>
+      prev.some((m) => m.kind === "video")
+        ? prev.map((m) => (m.kind === "video" ? { ...m, fit: videoFit } : m))
+        : prev,
+    );
+  }, [videoFit]);
+
+  async function handleMediaChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
-    const bitmaps = await Promise.all(files.map((f) => createImageBitmap(f)));
-    setImages((prev) => {
-      prev.forEach((b) => b.close());
-      return bitmaps;
+    const items: BackgroundMedia[] = await Promise.all(
+      files.map(async (f): Promise<BackgroundMedia> => {
+        if (f.type.startsWith("video/")) {
+          const video = document.createElement("video");
+          video.src = URL.createObjectURL(f);
+          video.muted = true;
+          video.playsInline = true;
+          video.preload = "auto";
+          video.loop = videoFit === "loop";
+          await new Promise<void>((res, rej) => {
+            video.onloadedmetadata = () => res();
+            video.onerror = () => rej(new Error(`Could not load ${f.name}`));
+          });
+          // Prime the first frame so a paused preview isn't black.
+          try {
+            video.currentTime = Math.min(0.04, video.duration || 0.04);
+          } catch {
+            /* not seekable yet */
+          }
+          return { kind: "video", video, duration: video.duration, fit: videoFit };
+        }
+        return { kind: "image", image: await createImageBitmap(f) };
+      }),
+    );
+    setMedia((prev) => {
+      disposeMedia(prev);
+      return items;
     });
   }
 
@@ -174,21 +220,49 @@ function App() {
 
           <label className={uploadLabel}>
             <span className="text-sm text-neutral-300">
-              {images.length > 0
-                ? `${images.length} image${images.length > 1 ? "s" : ""} loaded`
-                : "Background images"}
+              {media.length > 0
+                ? `${media.length} clip${media.length > 1 ? "s" : ""} loaded`
+                : "Background images / videos"}
             </span>
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,video/*"
               multiple
-              onChange={handleImagesChange}
+              onChange={handleMediaChange}
               className="hidden"
             />
             <span className="text-xs text-neutral-500">
-              select multiple to crossfade
+              images &amp; videos · multiple to crossfade
             </span>
           </label>
+
+          {hasVideo && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+                Short clips
+              </span>
+              <div className="flex gap-1.5">
+                {(["loop", "freeze"] as const).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setVideoFit(f)}
+                    title={
+                      f === "loop"
+                        ? "Loop a clip that's shorter than its slot"
+                        : "Hold the last frame of a short clip"
+                    }
+                    className={`flex-1 rounded px-2 py-1 text-xs font-medium capitalize transition-colors ${
+                      videoFit === f
+                        ? "bg-neutral-100 text-neutral-900"
+                        : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {audioFile && (
             <button
@@ -292,7 +366,7 @@ function App() {
             <p className="text-[11px] text-neutral-600 leading-snug">
               {canExport
                 ? `${ASPECT_OPTIONS[ratioIndex].name} · 30fps · audio muxed · draft is half-res`
-                : "Add audio, images & lyrics to export"}
+                : "Add audio, media & lyrics to export"}
             </p>
           </div>
         </aside>
@@ -302,7 +376,7 @@ function App() {
           <div className="flex-1 min-h-0 w-full flex items-center justify-center">
             <MoodPreview
               preset={effectivePreset}
-              images={images}
+              media={media}
               lines={lines}
               audioRef={audioRef}
             />

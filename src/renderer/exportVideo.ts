@@ -12,7 +12,11 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import type { LyricPreset } from "../presets/mood-preset";
-import { MoodRenderer, type FrameImage, type LyricLine } from "./moodRenderer";
+import {
+  MoodRenderer,
+  type BackgroundMedia,
+  type LyricLine,
+} from "./moodRenderer";
 
 // Single-thread ESM core (no SharedArrayBuffer → no COOP/COEP headers needed).
 // @ffmpeg/ffmpeg runs a module worker, so the ESM core is required (it dynamic-
@@ -23,7 +27,7 @@ export type ExportQuality = "draft" | "full";
 
 export interface ExportOptions {
   preset: LyricPreset;
-  images: FrameImage[];
+  media: BackgroundMedia[];
   lines: LyricLine[];
   audioFile: File;
   durationSeconds: number;
@@ -49,7 +53,7 @@ function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
 }
 
 export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
-  const { preset, images, lines, audioFile, durationSeconds, onProgress } = opts;
+  const { preset, media, lines, audioFile, durationSeconds, onProgress } = opts;
   const quality: ExportQuality = opts.quality ?? "full";
 
   // Draft renders at half resolution for a quick timing/vibe check; full uses
@@ -94,7 +98,7 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
   for (let f = 0; f < totalFrames; f++) {
     const t = f / fps;
     renderer.render(ctx, {
-      images,
+      media,
       timeSeconds: t,
       playbackSeconds: t,
       durationSeconds,
