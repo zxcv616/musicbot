@@ -11,7 +11,7 @@
 
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
-import { MOOD } from "../presets/mood-preset";
+import type { LyricPreset } from "../presets/mood-preset";
 import { MoodRenderer, type FrameImage, type LyricLine } from "./moodRenderer";
 
 // Single-thread ESM core (no SharedArrayBuffer → no COOP/COEP headers needed).
@@ -20,6 +20,7 @@ import { MoodRenderer, type FrameImage, type LyricLine } from "./moodRenderer";
 const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm";
 
 export interface ExportOptions {
+  preset: LyricPreset;
   images: FrameImage[];
   lines: LyricLine[];
   audioFile: File;
@@ -42,8 +43,7 @@ function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
 }
 
 export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
-  const { images, lines, audioFile, durationSeconds, onProgress } = opts;
-  const preset = MOOD;
+  const { preset, images, lines, audioFile, durationSeconds, onProgress } = opts;
   const { width, height, fps } = preset.output;
 
   // Offscreen render target at the true output resolution.

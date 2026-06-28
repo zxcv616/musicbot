@@ -38,7 +38,9 @@ export interface FrameInputs {
 }
 
 export class MoodRenderer {
-  private readonly preset: LyricPreset;
+  // Mutable so callers can swap settings (text colour, aspect ratio) between
+  // frames without rebuilding the renderer and its grain pool.
+  preset: LyricPreset;
 
   // Pre-rendered pool of film-grain tiles. Cycling through them each frame
   // gives animated grain cheaply and deterministically (frame index -> tile).

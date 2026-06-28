@@ -166,3 +166,22 @@ export const MOOD: LyricPreset = {
     },
   },
 };
+
+/**
+ * A small CURATED set of lyric text colours (no freeform picker — curation is
+ * the product). Each carries its own legibility halo: light text gets a dark
+ * halo, dark text gets a light halo, so it stays readable over any image.
+ */
+export interface TextColorOption {
+  name: string;
+  color: string;
+  haloColor: string;
+  haloOpacity: number;
+}
+
+export const TEXT_COLOR_OPTIONS: TextColorOption[] = [
+  { name: "Cream", color: "#F4F1EA", haloColor: "#000000", haloOpacity: 0.55 },
+  { name: "White", color: "#FFFFFF", haloColor: "#000000", haloOpacity: 0.6 },
+  { name: "Black", color: "#121212", haloColor: "#FFFFFF", haloOpacity: 0.62 },
+  { name: "Blush", color: "#E7B2A6", haloColor: "#000000", haloOpacity: 0.55 },
+];

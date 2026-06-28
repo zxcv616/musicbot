@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   segmentsToLines,
   transcribe,
@@ -8,6 +8,7 @@ import { MoodPreview } from "./MoodPreview";
 import { LyricEditor, type EditableLine } from "./LyricEditor";
 import { AudioPlayer } from "./AudioPlayer";
 import { exportMoodVideo } from "./renderer/exportVideo";
+import { MOOD, TEXT_COLOR_OPTIONS } from "./presets/mood-preset";
 
 function App() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -19,6 +20,21 @@ function App() {
   const [result, setResult] = useState<TranscriptionResult | null>(null);
   const [images, setImages] = useState<ImageBitmap[]>([]);
   const audioRef = useRef<HTMLAudioElement>(null);
+
+  // --- Style settings (driven through the Mood preset) ---
+  const [colorIndex, setColorIndex] = useState(0);
+
+  const effectivePreset = useMemo(() => {
+    const c = TEXT_COLOR_OPTIONS[colorIndex];
+    return {
+      ...MOOD,
+      text: {
+        ...MOOD.text,
+        color: c.color,
+        shadow: { ...MOOD.text.shadow, color: c.haloColor, opacity: c.haloOpacity },
+      },
+    };
+  }, [colorIndex]);
 
   // Editable lyric lines, seeded from the transcription (word-level timing) and
   // then refined in the editor. Drives the preview directly.
@@ -53,6 +69,7 @@ function App() {
     setExportProgress(0);
     try {
       const blob = await exportMoodVideo({
+        preset: effectivePreset,
         images,
         lines,
         audioFile,
@@ -178,6 +195,28 @@ function App() {
             </button>
           )}
 
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+              Text color
+            </span>
+            <div className="flex gap-2">
+              {TEXT_COLOR_OPTIONS.map((c, i) => (
+                <button
+                  key={c.name}
+                  onClick={() => setColorIndex(i)}
+                  title={c.name}
+                  aria-label={c.name}
+                  className={`w-7 h-7 rounded-full border transition-transform ${
+                    i === colorIndex
+                      ? "ring-2 ring-offset-2 ring-offset-neutral-950 ring-neutral-300 scale-105 border-transparent"
+                      : "border-neutral-700 hover:scale-105"
+                  }`}
+                  style={{ backgroundColor: c.color }}
+                />
+              ))}
+            </div>
+          </div>
+
           {status === "transcribing" && (
             <p className="text-xs text-neutral-400">
               Running local Whisper… first run downloads the model.
@@ -222,7 +261,12 @@ function App() {
         {/* CENTER: preview + playback */}
         <section className="flex-1 min-h-0 flex flex-col items-center justify-center gap-3 p-4">
           <div className="flex-1 min-h-0 w-full flex items-center justify-center">
-            <MoodPreview images={images} lines={lines} audioRef={audioRef} />
+            <MoodPreview
+              preset={effectivePreset}
+              images={images}
+              lines={lines}
+              audioRef={audioRef}
+            />
           </div>
           <div className="w-full max-w-sm shrink-0">
             {audioUrl ? (

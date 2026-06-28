@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { MOOD } from "./presets/mood-preset";
+import type { LyricPreset } from "./presets/mood-preset";
 import {
   MoodRenderer,
   type FrameImage,
@@ -7,27 +7,29 @@ import {
 } from "./renderer/moodRenderer";
 
 interface MoodPreviewProps {
+  preset: LyricPreset;
   images: FrameImage[];
   lines?: LyricLine[];
   audioRef?: React.RefObject<HTMLAudioElement | null>;
 }
 
 /**
- * Live preview surface. Renders at the preset's true output resolution
- * (1080×1920) and is CSS-scaled down to fit the page, so the preview matches
- * what the export will produce.
+ * Live preview surface. Renders at the preset's true output resolution and is
+ * CSS-scaled down to fit the page, so the preview matches the export.
  *
- * The renderer (and its grain pool) is created once; per-frame inputs are read
- * through refs so changing the image or lyrics never rebuilds it. Lyric sync is
- * driven by the <audio> element's currentTime; grain animates off a free clock.
+ * The renderer (and its grain pool) is created once; per-frame inputs — and the
+ * current preset (text colour, aspect ratio) — are read through refs so changing
+ * a setting never rebuilds it. The canvas is resized in-loop when the output
+ * dimensions change so the preview reflects the chosen aspect ratio.
  */
-export function MoodPreview({ images, lines, audioRef }: MoodPreviewProps) {
+export function MoodPreview({ preset, images, lines, audioRef }: MoodPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Latest per-frame inputs, read inside the rAF loop without re-running it.
+  const presetRef = useRef(preset);
   const imagesRef = useRef(images);
   const linesRef = useRef(lines);
   const audioElRef = useRef(audioRef);
+  presetRef.current = preset;
   imagesRef.current = images;
   linesRef.current = lines;
   audioElRef.current = audioRef;
@@ -38,15 +40,22 @@ export function MoodPreview({ images, lines, audioRef }: MoodPreviewProps) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const renderer = new MoodRenderer(MOOD);
+    const renderer = new MoodRenderer(presetRef.current);
     renderer.sizeCanvas(canvas);
 
     // Ensure the bundled Brat font is loaded so the canvas never falls back.
-    void document.fonts.load(`${MOOD.text.fontWeight} 84px "Arimo"`);
+    void document.fonts.load(`${presetRef.current.text.fontWeight} 84px "Arimo"`);
 
     let raf = 0;
     const start = performance.now();
     const loop = (now: number) => {
+      const p = presetRef.current;
+      renderer.preset = p;
+      // Resize the canvas if the aspect ratio / resolution changed.
+      if (canvas.width !== p.output.width || canvas.height !== p.output.height) {
+        renderer.sizeCanvas(canvas);
+      }
+
       const audio = audioElRef.current?.current;
       const duration =
         audio && Number.isFinite(audio.duration) ? audio.duration : undefined;
@@ -67,8 +76,8 @@ export function MoodPreview({ images, lines, audioRef }: MoodPreviewProps) {
   return (
     <canvas
       ref={canvasRef}
-      // Intrinsic 1080×1920 scaled down to fit the container (contain), so the
-      // 9:16 preview fills whichever dimension is the constraint.
+      // Intrinsic size = output resolution, scaled down to fit (contain), so the
+      // preview fills whichever dimension is the constraint at the chosen ratio.
       className="block max-h-full max-w-full rounded-xl shadow-2xl"
     />
   );
