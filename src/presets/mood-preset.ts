@@ -70,6 +70,11 @@ export interface TextConfig {
   color: string;               // off-white reads softer than pure #fff
   maxLinesVisible: 1 | 2;      // show current line, optionally next line dimmed
   nextLineOpacity: number;     // 0 if maxLinesVisible === 1
+  // Clear a line during instrumental gaps: once a line's last word has passed,
+  // keep it for lineHoldSeconds, but only clear early if the gap to the next
+  // line exceeds clearGapSeconds (so back-to-back lines never flicker).
+  lineHoldSeconds: number;
+  clearGapSeconds: number;
   textAlign: "center";
   // Vertical anchor: fraction of frame height for the text baseline zone.
   // ~0.5–0.62 keeps it in the mobile eye-focus center third, not dead center.
@@ -110,17 +115,17 @@ export const MOOD: LyricPreset = {
   },
 
   background: {
-    saturation: 0.85,
+    saturation: 0.82,          // slightly more faded/filmic
     contrast: 0.96,
-    brightness: 0.98,
-    liftBlacks: 0.06,
-    tint: { r: 255, g: 244, b: 230, strength: 0.06 }, // faint warm cast; swap to a cool cast for a cooler preset later
-    vignette: { strength: 0.45, softness: 0.7 },
-    topGradient:    { color: "#000000", height: 0.30, opacity: 0.35 },
-    bottomGradient: { color: "#000000", height: 0.40, opacity: 0.55 },
-    grain: { opacity: 0.07, size: 1.4, animated: true },
+    brightness: 0.96,          // a touch darker so light text reads
+    liftBlacks: 0.05,          // deeper blacks = more contrast & mood
+    tint: { r: 255, g: 244, b: 230, strength: 0.07 }, // faint warm cast; swap to a cool cast for a cooler preset later
+    vignette: { strength: 0.52, softness: 0.78 },     // a touch more focus toward centre
+    topGradient:    { color: "#000000", height: 0.32, opacity: 0.40 },
+    bottomGradient: { color: "#000000", height: 0.46, opacity: 0.62 }, // taller/darker base for text
+    grain: { opacity: 0.06, size: 1.4, animated: true }, // slightly cleaner
     lightLeak: { enabled: false, opacity: 0.12 },
-    crossfadeSeconds: 1.0,
+    crossfadeSeconds: 1.2,     // slightly slower, more filmic dissolves
   },
 
   text: {
@@ -131,18 +136,20 @@ export const MOOD: LyricPreset = {
     },
     defaultFont: "sans",
     fontWeight: 700,           // Brat is bold/black, not medium
-    fontSizeVh: 4.4,            // ~84px at 1920 tall
-    lineHeight: 1.25,
+    fontSizeVh: 4.8,            // ~92px at 1920 tall — bolder, more postable
+    lineHeight: 1.14,           // tight Brat stack
     letterSpacingEm: -0.04,     // very tight tracking — letters crammed together
     horizontalScale: 1.12,      // stretched-wide Brat feel
     textTransform: "lowercase", // Brat aesthetic: all lowercase
     color: "#F4F1EA",          // warm off-white
     maxLinesVisible: 1,        // one lyric line at a time
     nextLineOpacity: 0,        // no dimmed next line
+    lineHoldSeconds: 0.5,      // linger briefly after the last word
+    clearGapSeconds: 1.6,      // clear text during longer instrumental gaps
     textAlign: "center",
-    verticalAnchor: 0.56,
-    horizontalPaddingVw: 10,
-    shadow: { color: "#000000", blur: 24, opacity: 0.45 },
+    verticalAnchor: 0.6,       // lower-centre; keeps the subject visible above
+    horizontalPaddingVw: 9,
+    shadow: { color: "#000000", blur: 30, opacity: 0.55 }, // stronger legibility halo
     lineIn:  { fadeMs: 0, riseVh: 0 },  // hard cut in — no fade, no rise
     lineOut: { fadeMs: 0 },             // hard cut out — no fade
     wordHighlight: { enabled: false, activeColor: "#FFFFFF", inactiveOpacity: 0.55 },

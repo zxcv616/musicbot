@@ -458,6 +458,22 @@ export class MoodRenderer {
     const wrapWidth = maxWidth / tc.horizontalScale;
 
     const active = lines[activeIndex];
+    const nextLine = lines[activeIndex + 1];
+
+    // Clear the line during long instrumental gaps (and after the song's last
+    // line) so stale lyrics don't linger; back-to-back lines stay continuous.
+    let visibleUntil: number;
+    if (nextLine) {
+      const gap = nextLine.start - active.end;
+      visibleUntil =
+        gap > tc.clearGapSeconds ? active.end + tc.lineHoldSeconds : nextLine.start;
+    } else {
+      visibleUntil = active.end + tc.lineHoldSeconds;
+    }
+    if (t >= visibleUntil) {
+      ctx.restore();
+      return; // blank during the gap / after the final line
+    }
 
     // Entrance: hard cut when fadeMs is 0, otherwise fade + rise in.
     let activeAlpha = 1;
@@ -526,16 +542,25 @@ export class MoodRenderer {
 
     ctx.globalAlpha = alpha;
     ctx.fillStyle = tc.color;
-    // Soft glow (zero offset + blur) for legibility over any background.
-    ctx.shadowColor = hexToRgba(tc.shadow.color, tc.shadow.opacity);
-    ctx.shadowBlur = tc.shadow.blur;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
 
     // textAlign is "center", so draw at x = 0 (the translated centre).
-    for (let i = 0; i < rows.length; i++) {
-      ctx.fillText(rows[i], 0, top + rowH * (i + 0.5));
-    }
+    const drawRows = () => {
+      for (let i = 0; i < rows.length; i++) {
+        ctx.fillText(rows[i], 0, top + rowH * (i + 0.5));
+      }
+    };
+
+    // Two soft dark passes build a legibility halo that survives busy/bright
+    // images, then a final crisp pass with no shadow keeps the letters sharp.
+    ctx.shadowColor = hexToRgba(tc.shadow.color, tc.shadow.opacity);
+    ctx.shadowBlur = tc.shadow.blur;
+    drawRows();
+    drawRows();
+    ctx.shadowColor = "rgba(0,0,0,0)";
+    ctx.shadowBlur = 0;
+    drawRows();
 
     ctx.restore();
     return centerY + yShift + total / 2;
