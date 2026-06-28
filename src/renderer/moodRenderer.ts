@@ -425,13 +425,18 @@ export class MoodRenderer {
     const t = inputs.playbackSeconds ?? 0;
 
     const tc = this.preset.text;
-    const fontPx = (tc.fontSizeVh / 100) * height;
+    // Aspect-aware: size text off the SHORTER side so it reads consistently on
+    // 9:16, 1:1 and 16:9 instead of shrinking on wide frames.
+    const fontPx = (tc.fontSizeVmin / 100) * Math.min(width, height);
     const rowH = fontPx * tc.lineHeight;
     // fonts.* are full CSS family stacks, used as-is.
     const family = tc.defaultFont === "serif" ? tc.fonts.serif : tc.fonts.sans;
     const maxWidth = width - 2 * (tc.horizontalPaddingVw / 100) * width;
     const centerX = width / 2;
-    const anchorY = tc.verticalAnchor * height;
+    // The preset anchor (lower-centre) is tuned for portrait; on square/landscape
+    // centre the text vertically so it still sits right.
+    const portrait = height > width;
+    const anchorY = (portrait ? tc.verticalAnchor : 0.5) * height;
 
     ctx.save();
     ctx.font = `${tc.fontWeight} ${fontPx}px ${family}`;

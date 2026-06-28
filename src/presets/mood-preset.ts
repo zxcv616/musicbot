@@ -62,7 +62,8 @@ export interface TextConfig {
   defaultFont: "sans" | "serif";
 
   fontWeight: number;          // e.g. 500
-  fontSizeVh: number;          // font size as % of frame HEIGHT, so it scales with output
+  fontSizeVmin: number;        // font size as % of the SHORTER frame side, so it
+                               // stays consistent across aspect ratios
   lineHeight: number;          // multiplier
   letterSpacingEm: number;     // tracking, in em (negative = letters nearly touching)
   horizontalScale: number;     // canvas X-scale on text; >1 = stretched-wide (Brat) feel
@@ -136,7 +137,7 @@ export const MOOD: LyricPreset = {
     },
     defaultFont: "sans",
     fontWeight: 700,           // Brat is bold/black, not medium
-    fontSizeVh: 4.8,            // ~92px at 1920 tall — bolder, more postable
+    fontSizeVmin: 8.5,          // ~92px on a 1080-wide frame — bolder, postable
     lineHeight: 1.14,           // tight Brat stack
     letterSpacingEm: -0.04,     // very tight tracking — letters crammed together
     horizontalScale: 1.12,      // stretched-wide Brat feel
@@ -184,4 +185,17 @@ export const TEXT_COLOR_OPTIONS: TextColorOption[] = [
   { name: "White", color: "#FFFFFF", haloColor: "#000000", haloOpacity: 0.6 },
   { name: "Black", color: "#121212", haloColor: "#FFFFFF", haloOpacity: 0.62 },
   { name: "Blush", color: "#E7B2A6", haloColor: "#000000", haloOpacity: 0.55 },
+];
+
+/** Export aspect ratios. The renderer is aspect-aware (see moodRenderer). */
+export interface AspectOption {
+  name: string;
+  width: number;
+  height: number;
+}
+
+export const ASPECT_OPTIONS: AspectOption[] = [
+  { name: "9:16", width: 1080, height: 1920 },
+  { name: "1:1", width: 1080, height: 1080 },
+  { name: "16:9", width: 1920, height: 1080 },
 ];

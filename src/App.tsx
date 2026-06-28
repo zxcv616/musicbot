@@ -8,7 +8,7 @@ import { MoodPreview } from "./MoodPreview";
 import { LyricEditor, type EditableLine } from "./LyricEditor";
 import { AudioPlayer } from "./AudioPlayer";
 import { exportMoodVideo } from "./renderer/exportVideo";
-import { MOOD, TEXT_COLOR_OPTIONS } from "./presets/mood-preset";
+import { MOOD, TEXT_COLOR_OPTIONS, ASPECT_OPTIONS } from "./presets/mood-preset";
 
 function App() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -23,18 +23,21 @@ function App() {
 
   // --- Style settings (driven through the Mood preset) ---
   const [colorIndex, setColorIndex] = useState(0);
+  const [ratioIndex, setRatioIndex] = useState(0);
 
   const effectivePreset = useMemo(() => {
     const c = TEXT_COLOR_OPTIONS[colorIndex];
+    const a = ASPECT_OPTIONS[ratioIndex];
     return {
       ...MOOD,
+      output: { ...MOOD.output, width: a.width, height: a.height },
       text: {
         ...MOOD.text,
         color: c.color,
         shadow: { ...MOOD.text.shadow, color: c.haloColor, opacity: c.haloOpacity },
       },
     };
-  }, [colorIndex]);
+  }, [colorIndex, ratioIndex]);
 
   // Editable lyric lines, seeded from the transcription (word-level timing) and
   // then refined in the editor. Drives the preview directly.
@@ -213,6 +216,27 @@ function App() {
                   }`}
                   style={{ backgroundColor: c.color }}
                 />
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+              Aspect ratio
+            </span>
+            <div className="flex gap-1.5">
+              {ASPECT_OPTIONS.map((a, i) => (
+                <button
+                  key={a.name}
+                  onClick={() => setRatioIndex(i)}
+                  className={`flex-1 rounded px-2 py-1 text-xs font-medium transition-colors ${
+                    i === ratioIndex
+                      ? "bg-neutral-100 text-neutral-900"
+                      : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                  }`}
+                >
+                  {a.name}
+                </button>
               ))}
             </div>
           </div>
