@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { round2, clampStart, sortLines } from "./lyricTiming";
+import { round2, clampStart, sortLines, type TimingLine } from "./lyricTiming";
 
 describe("round2", () => {
   it("leaves already-rounded values unchanged", () => {
@@ -71,5 +71,65 @@ describe("sortLines", () => {
     const sorted = sortLines(lines);
     expect(sorted[0]).toEqual({ id: "a", start: 1, end: 2, text: "first" });
     expect(sorted[1]).toEqual({ id: "b", start: 2, end: 3, text: "second" });
+  });
+});
+
+// Verify the sort invariant holds after simulating editor mutations.
+describe("sort invariant after editor operations", () => {
+  function makeLine(id: string, start: number, end: number): TimingLine & { end: number } {
+    return { id, start, end };
+  }
+
+  it("remains sorted after changing a start time that moves a line earlier", () => {
+    const lines = [
+      makeLine("a", 0, 1),
+      makeLine("b", 2, 3),
+      makeLine("c", 5, 6),
+    ];
+    // Simulate setStart("c", 1.5) — moves c before b
+    const updated = lines.map((l) =>
+      l.id === "c" ? { ...l, start: clampStart(1.5) } : l,
+    );
+    const result = sortLines(updated);
+    expect(result.map((l) => l.id)).toEqual(["a", "c", "b"]);
+  });
+
+  it("remains sorted after setting start to 0 (clampStart floor)", () => {
+    const lines = [makeLine("a", 1, 2), makeLine("b", 3, 4)];
+    const updated = lines.map((l) =>
+      l.id === "b" ? { ...l, start: clampStart(-5) } : l,
+    );
+    const result = sortLines(updated);
+    expect(result.map((l) => l.id)).toEqual(["b", "a"]);
+    expect(result[0].start).toBe(0);
+  });
+
+  it("remains sorted after a split (midTime between start and end)", () => {
+    const original = makeLine("x", 4, 6);
+    const midTime = round2((original.start + original.end) / 2); // 5
+    const first = { ...original, end: midTime };
+    const second = { id: "y", start: midTime, end: original.end };
+    const result = sortLines([second, first]); // intentionally reversed input
+    expect(result.map((l) => l.id)).toEqual(["x", "y"]);
+    expect(result[0].start).toBe(4);
+    expect(result[1].start).toBe(5);
+  });
+
+  it("remains sorted when adding a line at the start of the song", () => {
+    const existing = [makeLine("b", 3, 4), makeLine("c", 7, 8)];
+    const newLine = makeLine("a", 0, 2);
+    const result = sortLines([...existing, newLine]);
+    expect(result.map((l) => l.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("handles ties in start time without throwing", () => {
+    const lines = [
+      makeLine("a", 2, 3),
+      makeLine("b", 2, 4), // same start as a
+    ];
+    const result = sortLines(lines);
+    expect(result).toHaveLength(2);
+    expect(result[0].start).toBe(2);
+    expect(result[1].start).toBe(2);
   });
 });
