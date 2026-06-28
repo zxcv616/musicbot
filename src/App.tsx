@@ -6,6 +6,7 @@ import {
 } from "./transcription";
 import { MoodPreview } from "./MoodPreview";
 import { LyricEditor, type EditableLine } from "./LyricEditor";
+import { AudioPlayer } from "./AudioPlayer";
 import { exportMoodVideo } from "./renderer/exportVideo";
 
 function App() {
@@ -225,7 +226,7 @@ function App() {
           </div>
           <div className="w-full max-w-sm shrink-0">
             {audioUrl ? (
-              <audio ref={audioRef} src={audioUrl} controls className="w-full" />
+              <AudioPlayer src={audioUrl} audioRef={audioRef} />
             ) : (
               <p className="text-xs text-neutral-600 text-center">
                 Upload audio to preview playback
