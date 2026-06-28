@@ -237,11 +237,16 @@ function App() {
 
         {/* RIGHT: lyric/timing editor (scrolls within itself) */}
         <aside className="w-96 shrink-0 h-full border-l border-neutral-900 p-4 flex flex-col min-h-0">
-          {lines.length > 0 ? (
-            <LyricEditor lines={lines} onChange={setLines} onPlayFrom={playFrom} />
+          {audioUrl ? (
+            <LyricEditor
+              lines={lines}
+              onChange={setLines}
+              onPlayFrom={playFrom}
+              audioRef={audioRef}
+            />
           ) : (
             <div className="m-auto text-center text-sm text-neutral-600">
-              Transcribe a song to edit lyrics &amp; timing here.
+              Upload audio, then transcribe or add lyric lines here.
             </div>
           )}
         </aside>

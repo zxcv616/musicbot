@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { LyricLine } from "./renderer/moodRenderer";
 
 /** A lyric line with a stable id so React can track it across edits. */
@@ -9,6 +10,8 @@ interface LyricEditorProps {
   lines: EditableLine[];
   onChange: (lines: EditableLine[]) => void;
   onPlayFrom: (seconds: number) => void;
+  /** Used to slot a newly added line at the current playback position. */
+  audioRef?: React.RefObject<HTMLAudioElement | null>;
 }
 
 const NUDGE = 0.1; // seconds per nudge
@@ -18,11 +21,19 @@ function round2(n: number): number {
 }
 
 /**
- * Minimal-but-real lyric/timing editor (Milestone 5). Edit text, nudge a line's
- * start time earlier/later, split a line in two, merge a line into the next, and
- * "play from here" to check sync. Lines are kept sorted by start time.
+ * Minimal-but-real lyric/timing editor (Milestones 5 & 8). Edit text, nudge a
+ * line's start time, split/merge lines, add new lines from scratch, and "play
+ * from here" to check sync. Lines are kept sorted by start time, so no song is
+ * unfinishable when transcription under-detects.
  */
-export function LyricEditor({ lines, onChange, onPlayFrom }: LyricEditorProps) {
+export function LyricEditor({
+  lines,
+  onChange,
+  onPlayFrom,
+  audioRef,
+}: LyricEditorProps) {
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+
   const sortStart = (ls: EditableLine[]) =>
     [...ls].sort((a, b) => a.start - b.start);
 
@@ -75,14 +86,45 @@ export function LyricEditor({ lines, onChange, onPlayFrom }: LyricEditorProps) {
     onChange([...lines.slice(0, i), first, second, ...lines.slice(i + 1)]);
   }
 
-  if (lines.length === 0) return null;
+  function addLine() {
+    // Slot the new line at the current playback position when available,
+    // otherwise just after the last line. Then nudge / play-from to fine-tune.
+    const playhead = audioRef?.current?.currentTime;
+    const fallback = lines.length > 0 ? lines[lines.length - 1].end : 0;
+    const start = round2(
+      playhead !== undefined && Number.isFinite(playhead) && playhead > 0
+        ? playhead
+        : fallback,
+    );
+    const line: EditableLine = {
+      id: crypto.randomUUID(),
+      text: "",
+      start,
+      end: start + 2,
+    };
+    setJustAddedId(line.id);
+    onChange(sortStart([...lines, line]));
+  }
 
   return (
     <section className="flex flex-col gap-2 h-full min-h-0">
-      <h2 className="text-sm font-medium text-neutral-300 shrink-0">
-        Lyrics &amp; timing
-      </h2>
+      <div className="flex items-center justify-between shrink-0">
+        <h2 className="text-sm font-medium text-neutral-300">Lyrics &amp; timing</h2>
+        <button
+          onClick={addLine}
+          title="Add a new lyric line at the current playback position"
+          className="rounded bg-neutral-100 text-neutral-900 px-2.5 py-1 text-xs font-medium hover:bg-white"
+        >
+          + Add line
+        </button>
+      </div>
+
       <div className="flex flex-col gap-2 flex-1 min-h-0 overflow-y-auto pr-1">
+        {lines.length === 0 && (
+          <p className="text-sm text-neutral-600 m-auto text-center px-4">
+            No lines yet. Press play, then “Add line” at each lyric and type it in.
+          </p>
+        )}
         {lines.map((line, i) => (
           <div
             key={line.id}
@@ -134,8 +176,10 @@ export function LyricEditor({ lines, onChange, onPlayFrom }: LyricEditorProps) {
             <input
               type="text"
               value={line.text}
+              autoFocus={line.id === justAddedId}
+              placeholder="lyric text…"
               onChange={(e) => setText(line.id, e.target.value)}
-              className="w-full rounded bg-neutral-950 border border-neutral-800 px-2 py-1.5 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+              className="w-full rounded bg-neutral-950 border border-neutral-800 px-2 py-1.5 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none"
             />
           </div>
         ))}
