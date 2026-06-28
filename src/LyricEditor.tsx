@@ -95,6 +95,10 @@ export function LyricEditor({
     onChange(sorted([...lines.slice(0, i), first, second, ...lines.slice(i + 1)]));
   }
 
+  function deleteLine(id: string) {
+    onChange(lines.filter((l) => l.id !== id));
+  }
+
   function addLine() {
     const playhead = audioRef?.current?.currentTime;
     const fallback = lines.length > 0 ? lines[lines.length - 1].end : 0;
@@ -204,6 +208,13 @@ export function LyricEditor({
                   className="rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   merge
+                </button>
+                <button
+                  onClick={() => deleteLine(line.id)}
+                  title="Delete this line"
+                  className="rounded bg-neutral-800 px-2 py-1 text-xs hover:bg-red-900 hover:text-red-300"
+                >
+                  ✕
                 </button>
               </div>
             </div>
