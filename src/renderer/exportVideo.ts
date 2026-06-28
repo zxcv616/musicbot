@@ -69,6 +69,38 @@ function seekVideoAndWait(video: HTMLVideoElement, time: number): Promise<void> 
   });
 }
 
+/**
+ * Create a private video element for the export from the same source. The export
+ * MUST NOT share <video> elements with the live preview: the preview's rAF keeps
+ * seeking those elements to follow the audio playhead, which would fight the
+ * export's per-frame seeks and freeze the background. Cloning fully isolates it.
+ */
+function cloneExportVideo(src: string): Promise<HTMLVideoElement> {
+  return new Promise((resolve, reject) => {
+    const v = document.createElement("video");
+    v.src = src;
+    v.muted = true;
+    v.playsInline = true;
+    v.preload = "auto";
+    if (v.readyState >= 1) {
+      resolve(v);
+      return;
+    }
+    v.onloadedmetadata = () => resolve(v);
+    v.onerror = () => reject(new Error("Could not load video for export"));
+  });
+}
+
+/** Clamp a seek target into the clip's actually-seekable range (never the dead tail). */
+function safeSeekTarget(video: HTMLVideoElement, target: number, fps: number): number {
+  let end = Number.isFinite(video.duration) ? video.duration : target;
+  if (video.seekable.length > 0) {
+    end = Math.min(end, video.seekable.end(video.seekable.length - 1));
+  }
+  // Keep one frame clear of the end so we never land on an unplayable tail.
+  return Math.min(Math.max(0, target), Math.max(0, end - 1 / fps));
+}
+
 function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -124,12 +156,20 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
 
   const totalFrames = Math.max(1, Math.ceil(durationSeconds * fps));
 
-  // Pause every video so seeking is deterministic (no playback racing us).
-  for (const m of media) if (m.kind === "video") m.video.pause();
+  // Use PRIVATE cloned video elements so the live preview (still mounted, still
+  // running its rAF) can't seek the same elements out from under us.
+  const exportMedia: BackgroundMedia[] = await Promise.all(
+    media.map(async (m) =>
+      m.kind === "video"
+        ? { ...m, video: await cloneExportVideo(m.video.src) }
+        : m,
+    ),
+  );
+  for (const m of exportMedia) if (m.kind === "video") m.video.pause();
 
   // Schedule is time-independent; compute once and reuse the same timing the
   // preview uses (getSchedule / visibleAt / clipLocalTime).
-  const schedule = renderer.getSchedule(media.length, durationSeconds, lines);
+  const schedule = renderer.getSchedule(exportMedia.length, durationSeconds, lines);
 
   // Render each frame and hand it to ffmpeg's in-memory filesystem.
   for (let f = 0; f < totalFrames; f++) {
@@ -140,7 +180,7 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
     // frame-accurate (and honours loop/freeze + crossfades, since the layer set
     // and local times come straight from the shared schedule).
     for (const layer of renderer.visibleAt(t, schedule)) {
-      const item = media[layer.index];
+      const item = exportMedia[layer.index];
       if (item.kind === "video") {
         const local = renderer.clipLocalTime(
           schedule[layer.index],
@@ -148,12 +188,12 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
           item.fit,
           t,
         );
-        await seekVideoAndWait(item.video, local);
+        await seekVideoAndWait(item.video, safeSeekTarget(item.video, local, fps));
       }
     }
 
     renderer.render(ctx, {
-      media,
+      media: exportMedia,
       timeSeconds: t,
       playbackSeconds: t,
       durationSeconds,
