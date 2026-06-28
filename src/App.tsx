@@ -6,6 +6,7 @@ import {
 } from "./transcription";
 import { MoodPreview } from "./MoodPreview";
 import { LyricEditor, type EditableLine } from "./LyricEditor";
+import { exportMoodVideo } from "./renderer/exportVideo";
 
 function App() {
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -33,6 +34,41 @@ function App() {
     if (!audio) return;
     audio.currentTime = seconds;
     void audio.play();
+  }
+
+  const [exporting, setExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState(0);
+
+  const canExport =
+    images.length > 0 &&
+    lines.length > 0 &&
+    !!audioFile &&
+    Number.isFinite(audioRef.current?.duration ?? NaN);
+
+  async function handleExport() {
+    const audio = audioRef.current;
+    if (!audio || !audioFile || !Number.isFinite(audio.duration)) return;
+    setExporting(true);
+    setExportProgress(0);
+    try {
+      const blob = await exportMoodVideo({
+        images,
+        lines,
+        audioFile,
+        durationSeconds: audio.duration,
+        onProgress: setExportProgress,
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "lyric-video.mp4";
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExporting(false);
+    }
   }
 
   // Revoke the object URL when it changes or on unmount to avoid leaks.
@@ -167,6 +203,34 @@ function App() {
         )}
 
         <LyricEditor lines={lines} onChange={setLines} onPlayFrom={playFrom} />
+
+        {canExport && (
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="rounded-lg bg-emerald-500 text-neutral-950 px-4 py-2 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {exporting
+                ? `Exporting… ${Math.round(exportProgress * 100)}%`
+                : "Export MP4 (9:16, 1080×1920)"}
+            </button>
+            {exporting && (
+              <>
+                <div className="h-1.5 w-full rounded bg-neutral-800 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-500 transition-[width]"
+                    style={{ width: `${Math.round(exportProgress * 100)}%` }}
+                  />
+                </div>
+                <p className="text-xs text-neutral-500 text-center">
+                  Rendering frames in the browser, then encoding — this runs
+                  locally and can take a while for longer songs.
+                </p>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

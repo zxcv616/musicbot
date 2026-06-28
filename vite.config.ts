@@ -10,4 +10,8 @@ export default defineConfig({
       "/api": "http://localhost:8000",
     },
   },
+  // ffmpeg.wasm ships a Worker that Vite's dep optimizer mangles; exclude it.
+  optimizeDeps: {
+    exclude: ["@ffmpeg/ffmpeg", "@ffmpeg/util"],
+  },
 });
