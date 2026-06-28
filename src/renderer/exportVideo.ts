@@ -39,6 +39,36 @@ export interface ExportOptions {
 
 const evenize = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
+/**
+ * Seek a video to an exact time and resolve once the frame is actually ready.
+ * `seeked` fires after the decoded frame is available, so awaiting it makes the
+ * subsequent drawImage frame-accurate. A timeout guards against a stuck seek so
+ * the export can never hang.
+ */
+function seekVideoAndWait(video: HTMLVideoElement, time: number): Promise<void> {
+  return new Promise((resolve) => {
+    if (Math.abs(video.currentTime - time) < 1e-3 && video.readyState >= 2) {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      video.removeEventListener("seeked", finish);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, 3000);
+    video.addEventListener("seeked", finish);
+    try {
+      video.currentTime = time;
+    } catch {
+      finish();
+    }
+  });
+}
+
 function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -94,9 +124,34 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
 
   const totalFrames = Math.max(1, Math.ceil(durationSeconds * fps));
 
+  // Pause every video so seeking is deterministic (no playback racing us).
+  for (const m of media) if (m.kind === "video") m.video.pause();
+
+  // Schedule is time-independent; compute once and reuse the same timing the
+  // preview uses (getSchedule / visibleAt / clipLocalTime).
+  const schedule = renderer.getSchedule(media.length, durationSeconds, lines);
+
   // Render each frame and hand it to ffmpeg's in-memory filesystem.
   for (let f = 0; f < totalFrames; f++) {
     const t = f / fps;
+
+    // For every visible layer that's a video, seek it to its exact local time
+    // and WAIT for the frame before drawing — this is what keeps export
+    // frame-accurate (and honours loop/freeze + crossfades, since the layer set
+    // and local times come straight from the shared schedule).
+    for (const layer of renderer.visibleAt(t, schedule)) {
+      const item = media[layer.index];
+      if (item.kind === "video") {
+        const local = renderer.clipLocalTime(
+          schedule[layer.index],
+          item.duration,
+          item.fit,
+          t,
+        );
+        await seekVideoAndWait(item.video, local);
+      }
+    }
+
     renderer.render(ctx, {
       media,
       timeSeconds: t,
