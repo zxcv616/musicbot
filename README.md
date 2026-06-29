@@ -42,6 +42,14 @@ npm run dev
 
 Open http://localhost:5173. Without the backend, everything works except transcription.
 
+## Deploy
+
+Build command: `npm run build`. Output dir: `dist`. Deploy that directory to any static host.
+
+`netlify.toml` and `vercel.json` are included. For Cloudflare Pages, set build command and output dir in the dashboard — no config file needed.
+
+**Do not set `VITE_ENABLE_TRANSCRIPTION=true`** in the host's environment variables. The deployed version has no backend: paste lyrics in the editor, use tap-to-time, preview, and export all work. Transcription (Whisper) is local-dev only.
+
 ## Other commands
 
 ```

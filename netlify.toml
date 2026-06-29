@@ -1,0 +1,7 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+# VITE_ENABLE_TRANSCRIPTION is intentionally absent.
+# The deployed build runs with no backend — transcription is local-dev only.
+# Do not set it in Netlify's environment variable dashboard.
