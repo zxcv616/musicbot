@@ -18,11 +18,11 @@ import {
   type LyricLine,
 } from "./moodRenderer";
 
-// Served from our own static host — copied from node_modules/@ffmpeg/core by
-// the ffmpegCorePlugin in vite.config.ts. No CDN dependency at export time.
-// BASE_URL is the app's deployment base (defaults to "/"); the files land at
-// /ffmpeg-core.js and /ffmpeg-core.wasm after `npm run build`.
-const CORE_BASE = `${import.meta.env.BASE_URL}ffmpeg-core`;
+// jsDelivr is an NPM mirror backed by multiple CDNs — more reliable than unpkg.
+// coreURL and wasmURL are always passed explicitly to ffmpeg.load() so the
+// worker's own internal fallback URL (@ffmpeg/core@0.12.9 on unpkg) is never
+// reached.
+const CORE_BASE = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm";
 
 export type ExportQuality = "draft" | "full";
 
@@ -151,8 +151,8 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
 
   const ffmpeg = new FFmpeg();
   await ffmpeg.load({
-    coreURL: await toBlobURL(`${CORE_BASE}.js`, "text/javascript"),
-    wasmURL: await toBlobURL(`${CORE_BASE}.wasm`, "application/wasm"),
+    coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, "text/javascript"),
+    wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
   });
 
   const totalFrames = Math.max(1, Math.ceil(durationSeconds * fps));
