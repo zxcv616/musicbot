@@ -12,6 +12,7 @@ import type { BackgroundMedia, VideoFit } from "./renderer/moodRenderer";
 import { MOOD, TEXT_COLOR_OPTIONS, ASPECT_OPTIONS } from "./presets/mood-preset";
 import { BRAT } from "./presets/brat-preset";
 import { buildEffectivePreset } from "./utils/presetUtils";
+import { TRANSCRIPTION_ENABLED } from "./config";
 
 const ALL_PRESETS = [MOOD, BRAT];
 
@@ -272,7 +273,7 @@ function App() {
             </div>
           )}
 
-          {audioFile && (
+          {TRANSCRIPTION_ENABLED && audioFile && (
             <button
               onClick={handleTranscribe}
               disabled={status === "transcribing"}
@@ -346,7 +347,7 @@ function App() {
             </div>
           </div>
 
-          {status === "transcribing" && (
+          {TRANSCRIPTION_ENABLED && status === "transcribing" && (
             <p className="text-xs text-neutral-400">
               Running local Whisper… first run downloads the model.
             </p>
@@ -354,7 +355,7 @@ function App() {
           {error && (
             <p className="text-xs text-red-400 break-words">Error: {error}</p>
           )}
-          {result && (
+          {TRANSCRIPTION_ENABLED && result && (
             <p className="text-[11px] text-neutral-600 leading-snug">
               {result.engine} · {result.model} · {result.language}
             </p>
