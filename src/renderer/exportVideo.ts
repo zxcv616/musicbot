@@ -18,10 +18,11 @@ import {
   type LyricLine,
 } from "./moodRenderer";
 
-// Single-thread ESM core (no SharedArrayBuffer → no COOP/COEP headers needed).
-// @ffmpeg/ffmpeg runs a module worker, so the ESM core is required (it dynamic-
-// imports the core and reads its default export).
-const CORE_BASE = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm";
+// Served from our own static host — copied from node_modules/@ffmpeg/core by
+// the ffmpegCorePlugin in vite.config.ts. No CDN dependency at export time.
+// BASE_URL is the app's deployment base (defaults to "/"); the files land at
+// /ffmpeg-core.js and /ffmpeg-core.wasm after `npm run build`.
+const CORE_BASE = `${import.meta.env.BASE_URL}ffmpeg-core`;
 
 export type ExportQuality = "draft" | "full";
 
@@ -150,8 +151,8 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
 
   const ffmpeg = new FFmpeg();
   await ffmpeg.load({
-    coreURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.js`, "text/javascript"),
-    wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
+    coreURL: await toBlobURL(`${CORE_BASE}.js`, "text/javascript"),
+    wasmURL: await toBlobURL(`${CORE_BASE}.wasm`, "application/wasm"),
   });
 
   const totalFrames = Math.max(1, Math.ceil(durationSeconds * fps));

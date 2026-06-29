@@ -23,6 +23,10 @@ dist-ssr
 *.sln
 *.sw?
 
+# ffmpeg core — copied from node_modules by the Vite plugin on build/dev start
+public/ffmpeg-core.js
+public/ffmpeg-core.wasm
+
 # Python / backend
 backend/.venv/
 __pycache__/
