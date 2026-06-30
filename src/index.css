@@ -1,1 +1,46 @@
 @import "tailwindcss";
+
+/* Dual-handle range slider (export trim). Two native range inputs are stacked
+   on one track; the input itself ignores pointer events so both thumbs stay
+   grabbable, and only the thumbs re-enable them. */
+.range-dual {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.range-dual:focus {
+  outline: none;
+}
+.range-dual::-webkit-slider-runnable-track,
+.range-dual::-moz-range-track {
+  background: transparent;
+  border: none;
+}
+.range-dual::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid #10b981; /* emerald-500 */
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.range-dual::-moz-range-thumb {
+  pointer-events: auto;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: #ffffff;
+  border: 2px solid #10b981;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}

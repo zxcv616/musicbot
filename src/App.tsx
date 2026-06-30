@@ -12,9 +12,21 @@ import type { BackgroundMedia, VideoFit } from "./renderer/moodRenderer";
 import { MOOD, TEXT_COLOR_OPTIONS, ASPECT_OPTIONS } from "./presets/mood-preset";
 import { BRAT } from "./presets/brat-preset";
 import { buildEffectivePreset } from "./utils/presetUtils";
+import { transcribeInBrowser } from "./browserTranscribe";
+import { alignLyrics, wordsToLines } from "./utils/lyricAlign";
 import { TRANSCRIPTION_ENABLED } from "./config";
 
 const ALL_PRESETS = [MOOD, BRAT];
+
+// Smallest exportable clip length (seconds), so the trim handles can't cross.
+const MIN_CLIP_SECONDS = 1;
+
+function fmtClock(t: number): string {
+  if (!Number.isFinite(t) || t < 0) return "0:00";
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 function disposeMedia(items: BackgroundMedia[]): void {
   for (const m of items) {
@@ -71,12 +83,77 @@ function App() {
     setLines(seeded.map((l) => ({ ...l, id: crypto.randomUUID() })));
   }, [result]);
 
+  // Paste-lyrics → in-browser transcription → align timings onto the artist's
+  // (correct) words. Fully client-side; no backend needed.
+  const [lyricsText, setLyricsText] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncStage, setSyncStage] = useState("");
+  const [syncPct, setSyncPct] = useState(0);
+
+  async function handleSyncLyrics() {
+    if (!audioFile) return;
+    const hasLyrics = lyricsText.trim().length > 0;
+    setSyncing(true);
+    setError(null);
+    setSyncStage("Loading model…");
+    setSyncPct(0);
+    try {
+      const words = await transcribeInBrowser(audioFile, (p) => {
+        if (p.stage === "loading") {
+          setSyncStage("Downloading model…");
+          setSyncPct(p.progress ?? 0);
+        } else {
+          setSyncStage("Listening to the audio…");
+          setSyncPct(0);
+        }
+      });
+      // Pasted lyrics → keep the artist's words, borrow only timing.
+      // Blank → auto-transcribe: use the model's own words, grouped into lines.
+      const newLines = hasLyrics ? alignLyrics(lyricsText, words) : wordsToLines(words);
+      if (newLines.length === 0) {
+        throw new Error("Couldn't sync — no vocals detected in the audio.");
+      }
+      setLines(newLines.map((l) => ({ ...l, id: crypto.randomUUID() })));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncing(false);
+      setSyncStage("");
+    }
+  }
+
   function playFrom(seconds: number) {
     const audio = audioRef.current;
     if (!audio) return;
     audio.currentTime = seconds;
     void audio.play();
   }
+
+  // Export trim: the song-time window [trimStart, trimEnd] to render. Seeded to
+  // the full song once metadata loads; reset when a new file is chosen.
+  const [songDuration, setSongDuration] = useState(0);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const trimmed = songDuration > 0 && (trimStart > 0 || trimEnd < songDuration);
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+    const onMeta = () => {
+      const d = Number.isFinite(a.duration) ? a.duration : 0;
+      setSongDuration(d);
+      // Only seed the end the first time (when still 0) so reloads/durationchange
+      // events don't clobber a range the user has already set.
+      setTrimEnd((prev) => (prev === 0 ? d : prev));
+    };
+    if (Number.isFinite(a.duration) && a.duration > 0) onMeta();
+    a.addEventListener("loadedmetadata", onMeta);
+    a.addEventListener("durationchange", onMeta);
+    return () => {
+      a.removeEventListener("loadedmetadata", onMeta);
+      a.removeEventListener("durationchange", onMeta);
+    };
+  }, [audioUrl]);
 
   const [exportMode, setExportMode] = useState<ExportQuality | null>(null);
   const [exportProgress, setExportProgress] = useState(0);
@@ -100,6 +177,8 @@ function App() {
         lines,
         audioFile,
         durationSeconds: audio.duration,
+        startSeconds: trimmed ? trimStart : 0,
+        endSeconds: trimmed ? trimEnd : audio.duration,
         quality,
         onProgress: setExportProgress,
       });
@@ -134,6 +213,10 @@ function App() {
     setResult(null);
     setError(null);
     setStatus("idle");
+    // New song → reset the trim window; reseeded on loadedmetadata.
+    setSongDuration(0);
+    setTrimStart(0);
+    setTrimEnd(0);
   }
 
   // Dispose media only on unmount (not on every change — videoFit remaps reuse
@@ -273,6 +356,50 @@ function App() {
             </div>
           )}
 
+          {audioFile && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+                Lyrics
+              </span>
+              <textarea
+                value={lyricsText}
+                onChange={(e) => setLyricsText(e.target.value)}
+                placeholder="Paste your lyrics for perfect words — or leave blank to auto-transcribe"
+                rows={5}
+                className="w-full resize-y rounded-lg bg-neutral-900 border border-neutral-800 px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600 focus:border-neutral-600 focus:outline-none"
+              />
+              <button
+                onClick={handleSyncLyrics}
+                disabled={syncing}
+                title={
+                  lyricsText.trim()
+                    ? "Transcribe the audio in your browser, then align your pasted lyrics to it"
+                    : "Auto-transcribe the audio in your browser (no lyrics typed)"
+                }
+                className="rounded-lg bg-neutral-100 text-neutral-900 px-4 py-2 text-sm font-medium hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {syncing
+                  ? syncStage || "Syncing…"
+                  : lyricsText.trim()
+                    ? "Sync pasted lyrics to audio"
+                    : "Auto-transcribe lyrics"}
+              </button>
+              {syncing && (
+                <>
+                  <div className="h-1.5 w-full rounded bg-neutral-800 overflow-hidden">
+                    <div
+                      className="h-full bg-neutral-300 transition-[width]"
+                      style={{ width: `${Math.round(syncPct * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-neutral-600 leading-snug">
+                    First run downloads the model (~tens of MB), then it's cached.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
           {TRANSCRIPTION_ENABLED && audioFile && (
             <button
               onClick={handleTranscribe}
@@ -363,6 +490,79 @@ function App() {
 
           {/* Export pinned to the bottom of the controls column. */}
           <div className="mt-auto flex flex-col gap-2">
+            {songDuration > 0 && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+                    Export range
+                  </span>
+                  {trimmed && (
+                    <button
+                      onClick={() => {
+                        setTrimStart(0);
+                        setTrimEnd(songDuration);
+                      }}
+                      className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
+                    >
+                      Full song
+                    </button>
+                  )}
+                </div>
+                <div className="relative h-4 my-0.5">
+                  {/* Full track */}
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-1 rounded-full bg-neutral-700" />
+                  {/* Selected region between the two handles */}
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 h-1 rounded-full bg-emerald-500"
+                    style={{
+                      left: `${(trimStart / songDuration) * 100}%`,
+                      width: `${((trimEnd - trimStart) / songDuration) * 100}%`,
+                    }}
+                  />
+                  <input
+                    type="range"
+                    min={0}
+                    max={songDuration}
+                    step={0.1}
+                    value={trimStart}
+                    onChange={(e) =>
+                      setTrimStart(
+                        Math.min(
+                          parseFloat(e.target.value),
+                          trimEnd - MIN_CLIP_SECONDS,
+                        ),
+                      )
+                    }
+                    aria-label="Clip start"
+                    className="range-dual"
+                  />
+                  <input
+                    type="range"
+                    min={0}
+                    max={songDuration}
+                    step={0.1}
+                    value={trimEnd}
+                    onChange={(e) =>
+                      setTrimEnd(
+                        Math.max(
+                          parseFloat(e.target.value),
+                          trimStart + MIN_CLIP_SECONDS,
+                        ),
+                      )
+                    }
+                    aria-label="Clip end"
+                    className="range-dual"
+                  />
+                </div>
+                <div className="flex justify-between text-[11px] tabular-nums text-neutral-400">
+                  <span>{fmtClock(trimStart)}</span>
+                  <span className="text-neutral-300">
+                    {fmtClock(trimEnd - trimStart)} clip
+                  </span>
+                  <span>{fmtClock(trimEnd)}</span>
+                </div>
+              </div>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={() => handleExport("draft")}
@@ -395,7 +595,9 @@ function App() {
             )}
             <p className="text-[11px] text-neutral-600 leading-snug">
               {canExport
-                ? `${ASPECT_OPTIONS[ratioIndex].name} · 30fps · audio muxed · draft is half-res`
+                ? `${ASPECT_OPTIONS[ratioIndex].name} · 30fps · ${
+                    trimmed ? `${fmtClock(trimEnd - trimStart)} clip` : "full song"
+                  } · draft is half-res`
                 : "Add audio, media & lyrics to export"}
             </p>
           </div>

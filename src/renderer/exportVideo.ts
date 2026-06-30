@@ -32,11 +32,21 @@ export interface ExportOptions {
   lines: LyricLine[];
   audioFile: File;
   durationSeconds: number;
+  /**
+   * Trim: render only the song-time window [startSeconds, endSeconds). Defaults
+   * to the whole song. The media schedule still spans the full song, so a
+   * trimmed clip shows exactly what the preview shows during that window.
+   */
+  startSeconds?: number;
+  endSeconds?: number;
   /** "draft" = half-resolution + ultrafast encode for a quick check. */
   quality?: ExportQuality;
   /** 0..1 across render + encode. */
   onProgress?: (fraction: number) => void;
 }
+
+const clampRange = (v: number, lo: number, hi: number) =>
+  Math.min(hi, Math.max(lo, v));
 
 const evenize = (n: number) => Math.max(2, Math.round(n / 2) * 2);
 
@@ -135,6 +145,13 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
         };
   const { width, height, fps } = renderPreset.output;
 
+  // Song-time window to export. Defaults to the whole song. The schedule below
+  // is still built from the full duration, so background timing/lyric sync match
+  // the live preview at each rendered instant.
+  const clipStart = clampRange(opts.startSeconds ?? 0, 0, durationSeconds);
+  const clipEnd = clampRange(opts.endSeconds ?? durationSeconds, clipStart, durationSeconds);
+  const windowLength = Math.max(1 / fps, clipEnd - clipStart);
+
   // Offscreen render target at the (effective) output resolution.
   const canvas = document.createElement("canvas");
   canvas.width = width;
@@ -155,7 +172,7 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
     wasmURL: await toBlobURL(`${CORE_BASE}/ffmpeg-core.wasm`, "application/wasm"),
   });
 
-  const totalFrames = Math.max(1, Math.ceil(durationSeconds * fps));
+  const totalFrames = Math.max(1, Math.ceil(windowLength * fps));
 
   // Use PRIVATE cloned video elements so the live preview (still mounted, still
   // running its rAF) can't seek the same elements out from under us.
@@ -174,7 +191,9 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
 
   // Render each frame and hand it to ffmpeg's in-memory filesystem.
   for (let f = 0; f < totalFrames; f++) {
-    const t = f / fps;
+    // Offset into the song so a trimmed export renders the real song content
+    // for that window (lyrics, crossfades, grain all stay in sync with preview).
+    const t = clipStart + f / fps;
 
     // For every visible layer that's a video, seek it to its exact local time
     // and WAIT for the frame before drawing — this is what keeps export
@@ -223,6 +242,10 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
   await ffmpeg.exec([
     "-framerate", String(fps),
     "-i", "frame_%05d.jpg",
+    // Seek + limit the audio input to the same window the frames cover. With the
+    // default full-song range this is "-ss 0 -t <full>", i.e. a no-op.
+    "-ss", String(clipStart),
+    "-t", String(windowLength),
     "-i", audioName,
     "-c:v", "libx264",
     ...x264,
