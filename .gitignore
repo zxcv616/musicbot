@@ -12,6 +12,9 @@ dist-ssr
 *.local
 *.tsbuildinfo
 
+# onnxruntime-web wasm copied in by scripts/copy-ort-wasm.mjs (pre dev/build)
+public/ort/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -47,6 +47,14 @@ function loadPipeline(
     const { pipeline, env } = await import("@huggingface/transformers");
     // We only ever fetch models from the Hub, never from our own server path.
     env.allowLocalModels = false;
+    // Serve the ONNX runtime wasm from our own origin. transformers.js otherwise
+    // defaults to a jsDelivr URL pinned to onnxruntime-web's version — which here
+    // is a dev build not published to the CDN, so it 404s in production
+    // ("Failed to fetch"). Files are copied to public/ort/ by the pre dev/build
+    // hook (scripts/copy-ort-wasm.mjs); ONNX appends the variant it needs.
+    if (env.backends?.onnx?.wasm) {
+      env.backends.onnx.wasm.wasmPaths = `${import.meta.env.BASE_URL}ort/`;
+    }
     try {
       return (await pipeline("automatic-speech-recognition", MODEL_ID, {
         device: "webgpu",
