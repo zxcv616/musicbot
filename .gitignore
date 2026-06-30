@@ -15,6 +15,9 @@ dist-ssr
 # onnxruntime-web wasm copied in by scripts/copy-ort-wasm.mjs (pre dev/build)
 public/ort/
 
+# wrangler local dev state
+.wrangler/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -55,6 +55,14 @@ function loadPipeline(
     if (env.backends?.onnx?.wasm) {
       env.backends.onnx.wasm.wasmPaths = `${import.meta.env.BASE_URL}ort/`;
     }
+    // In production, load model files through our same-origin /hf/ proxy (the
+    // Cloudflare Worker forwards to Hugging Face server-side). The browser's
+    // direct cross-origin fetch to huggingface.co fails with a CORS error on
+    // workers.dev; same-origin avoids it. In dev we hit HF directly (works from
+    // localhost), so only rewrite for the built app.
+    if (!import.meta.env.DEV) {
+      env.remoteHost = `${location.origin}/hf/`;
+    }
     try {
       return (await pipeline("automatic-speech-recognition", MODEL_ID, {
         device: "webgpu",
