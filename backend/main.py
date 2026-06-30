@@ -19,10 +19,22 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from faster_whisper import WhisperModel
 
-WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "base")
+# large-v3 is far more accurate on sung vocals than the old "base" default.
+# It's a ~3GB one-time download and slower on CPU; drop to "medium"/"small"
+# via WHISPER_MODEL if local CPU runs are too slow for quick A/B testing.
+WHISPER_MODEL = os.environ.get("WHISPER_MODEL", "large-v3")
 # CPU + int8 keeps it light and works on Apple Silicon without CUDA.
 WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE = os.environ.get("WHISPER_COMPUTE", "int8")
+# VAD (voice-activity detection) is tuned for speech and DROPS sung vocals over
+# instrumentation — the cause of lines going missing. Off by default for music;
+# set WHISPER_VAD=true only if you transcribe spoken-word/podcast material.
+WHISPER_VAD = os.environ.get("WHISPER_VAD", "false").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 
 app = FastAPI(title="Lyric Video Transcription")
 
@@ -64,7 +76,7 @@ async def transcribe(file: UploadFile = File(...)) -> dict:
         segments, info = model.transcribe(
             tmp.name,
             word_timestamps=True,
-            vad_filter=True,  # skip long silent/instrumental gaps
+            vad_filter=WHISPER_VAD,  # off for music: VAD eats sung vocals
         )
 
         out_segments = []
