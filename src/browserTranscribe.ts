@@ -66,9 +66,11 @@ function loadPipeline(
     try {
       return (await pipeline("automatic-speech-recognition", MODEL_ID, {
         device: "webgpu",
-        // fp16 ≈ half the download of fp32 with negligible accuracy loss, and is
-        // the well-supported quantization for WebGPU.
-        dtype: "fp16",
+        // fp32, not fp16: word-level timestamps come from the decoder's
+        // cross-attention (DTW), which is precision-sensitive — fp16 visibly
+        // degraded the timing. The larger download is the price of accurate
+        // sync. (See the download-size note; revisit with a smaller model.)
+        dtype: "fp32",
         progress_callback,
       })) as AutomaticSpeechRecognitionPipeline;
     } catch {
