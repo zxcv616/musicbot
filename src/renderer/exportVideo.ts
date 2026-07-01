@@ -125,6 +125,113 @@ function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Uint8Array> {
   });
 }
 
+/**
+ * Hardware H.264 video encoding via WebCodecs.
+ *
+ * Canvas frames go straight into the platform encoder as raw pixels — skipping
+ * the JPEG round-trip of the fallback path entirely — and come out as an
+ * Annex B H.264 elementary stream. ffmpeg then only muxes ("-c:v copy") that
+ * stream with the audio, so the slow wasm x264 encode is avoided. Several times
+ * faster AND slightly higher quality (no intermediate JPEG loss).
+ *
+ * `create()` returns null when WebCodecs/H.264 isn't available (older Safari,
+ * Firefox configs), in which case the caller uses the JPEG+libx264 path.
+ */
+class WebCodecsH264 {
+  private encoder: VideoEncoder;
+  private chunks: Uint8Array[] = [];
+  private totalBytes = 0;
+  private error: unknown = null;
+  private readonly fps: number;
+
+  private constructor(config: VideoEncoderConfig, fps: number) {
+    this.fps = fps;
+    this.encoder = new VideoEncoder({
+      output: (chunk) => {
+        const buf = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(buf);
+        this.chunks.push(buf);
+        this.totalBytes += buf.byteLength;
+      },
+      error: (e) => {
+        this.error = e;
+      },
+    });
+    this.encoder.configure(config);
+  }
+
+  static async create(
+    width: number,
+    height: number,
+    fps: number,
+    quality: ExportQuality,
+  ): Promise<WebCodecsH264 | null> {
+    if (typeof VideoEncoder === "undefined") return null;
+    // Generous bitrate: TikTok/IG re-compress on upload anyway, and clips are
+    // short, so we err on quality. Draft halves the bits-per-pixel too.
+    const bpp = quality === "draft" ? 0.1 : 0.2;
+    const bitrate = Math.min(20_000_000, Math.round(width * height * fps * bpp));
+    // High → Main → Baseline profile at levels that cover 1080x1920@30; the
+    // first config the platform reports as supported wins.
+    for (const codec of ["avc1.640033", "avc1.64002a", "avc1.4d002a", "avc1.42002a"]) {
+      const config: VideoEncoderConfig = {
+        codec,
+        width,
+        height,
+        framerate: fps,
+        bitrate,
+        latencyMode: "quality",
+        avc: { format: "annexb" },
+      };
+      try {
+        const support = await VideoEncoder.isConfigSupported(config);
+        if (support.supported) return new WebCodecsH264(config, fps);
+      } catch {
+        // malformed/unsupported config on this platform — try the next
+      }
+    }
+    return null;
+  }
+
+  async addFrame(canvas: HTMLCanvasElement, frameIndex: number): Promise<void> {
+    if (this.error) throw this.error;
+    const frame = new VideoFrame(canvas, {
+      timestamp: Math.round((frameIndex * 1e6) / this.fps),
+      duration: Math.round(1e6 / this.fps),
+    });
+    // Keyframe every 2s keeps the stream seekable without hurting bitrate much.
+    this.encoder.encode(frame, { keyFrame: frameIndex % (2 * this.fps) === 0 });
+    frame.close();
+    // Backpressure: don't let render outrun the encoder unboundedly.
+    while (this.encoder.encodeQueueSize > 4) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+
+  /** Flush the encoder and return the concatenated Annex B stream. */
+  async finish(): Promise<Uint8Array> {
+    await this.encoder.flush();
+    this.encoder.close();
+    if (this.error) throw this.error;
+    const out = new Uint8Array(this.totalBytes);
+    let off = 0;
+    for (const c of this.chunks) {
+      out.set(c, off);
+      off += c.byteLength;
+    }
+    return out;
+  }
+
+  /** Abandon the encode (fallback path is taking over). */
+  dispose(): void {
+    try {
+      if (this.encoder.state !== "closed") this.encoder.close();
+    } catch {
+      // already errored/closed
+    }
+  }
+}
+
 export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
   const { preset, media, lines, audioFile, durationSeconds, onProgress } = opts;
   const quality: ExportQuality = opts.quality ?? "full";
@@ -162,8 +269,11 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
   // Same renderer instance type as the preview — identical code path.
   const renderer = new MoodRenderer(renderPreset);
 
-  // Make sure the bundled font is ready so frames aren't rendered with a fallback.
-  await document.fonts.load(`${preset.text.fontWeight} 84px "Arimo"`);
+  // Make sure the preset's bundled font is ready so frames aren't rendered with
+  // a fallback (each preset can use a different family).
+  const fontFamily =
+    preset.text.defaultFont === "serif" ? preset.text.fonts.serif : preset.text.fonts.sans;
+  await document.fonts.load(`${preset.text.fontWeight} 84px ${fontFamily}`);
   await document.fonts.ready;
 
   const ffmpeg = new FFmpeg();
@@ -189,40 +299,69 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
   // preview uses (getSchedule / visibleAt / clipLocalTime).
   const schedule = renderer.getSchedule(exportMedia.length, durationSeconds, lines);
 
-  // Render each frame and hand it to ffmpeg's in-memory filesystem.
-  for (let f = 0; f < totalFrames; f++) {
-    // Offset into the song so a trimmed export renders the real song content
-    // for that window (lyrics, crossfades, grain all stay in sync with preview).
-    const t = clipStart + f / fps;
+  // Render every frame, handing each finished canvas to `sink`. Shared by both
+  // encode paths — the render/seek logic is identical; only the sink differs.
+  async function renderFrames(
+    sink: (canvas: HTMLCanvasElement, frameIndex: number) => Promise<void>,
+  ): Promise<void> {
+    for (let f = 0; f < totalFrames; f++) {
+      // Offset into the song so a trimmed export renders the real song content
+      // for that window (lyrics, crossfades, grain all stay in sync with preview).
+      const t = clipStart + f / fps;
 
-    // For every visible layer that's a video, seek it to its exact local time
-    // and WAIT for the frame before drawing — this is what keeps export
-    // frame-accurate (and honours loop/freeze + crossfades, since the layer set
-    // and local times come straight from the shared schedule).
-    for (const layer of renderer.visibleAt(t, schedule)) {
-      const item = exportMedia[layer.index];
-      if (item.kind === "video") {
-        const local = renderer.clipLocalTime(
-          schedule[layer.index],
-          item.duration,
-          item.fit,
-          t,
-        );
-        await seekVideoAndWait(item.video, safeSeekTarget(item.video, local, fps));
+      // For every visible layer that's a video, seek it to its exact local time
+      // and WAIT for the frame before drawing — this is what keeps export
+      // frame-accurate (and honours loop/freeze + crossfades, since the layer set
+      // and local times come straight from the shared schedule).
+      for (const layer of renderer.visibleAt(t, schedule)) {
+        const item = exportMedia[layer.index];
+        if (item.kind === "video") {
+          const local = renderer.clipLocalTime(
+            schedule[layer.index],
+            item.duration,
+            item.fit,
+            t,
+          );
+          await seekVideoAndWait(item.video, safeSeekTarget(item.video, local, fps));
+        }
       }
-    }
 
-    renderer.render(ctx, {
-      media: exportMedia,
-      timeSeconds: t,
-      playbackSeconds: t,
-      durationSeconds,
-      lines,
+      renderer.render(ctx!, {
+        media: exportMedia,
+        timeSeconds: t,
+        playbackSeconds: t,
+        durationSeconds,
+        lines,
+      });
+      await sink(canvas, f);
+      onProgress?.((f / totalFrames) * 0.8); // rendering is ~80% of the work
+    }
+  }
+
+  // Prefer hardware encoding via WebCodecs; fall back to JPEG frames + wasm
+  // libx264 when unsupported, or if the encoder dies mid-flight (rare, but
+  // hardware encoders can reject long sessions) — in which case the whole
+  // render is redone on the fallback path so the user still gets their file.
+  let hwStream: Uint8Array | null = null;
+  const hw = await WebCodecsH264.create(width, height, fps, quality);
+  if (hw) {
+    try {
+      await renderFrames((c, f) => hw.addFrame(c, f));
+      hwStream = await hw.finish();
+    } catch (err) {
+      console.warn("WebCodecs encode failed; falling back to libx264:", err);
+      hw.dispose();
+      hwStream = null;
+    }
+  }
+
+  if (hwStream) {
+    await ffmpeg.writeFile("video.h264", hwStream);
+  } else {
+    await renderFrames(async (c, f) => {
+      const jpeg = await canvasToJpeg(c);
+      await ffmpeg.writeFile(`frame_${String(f).padStart(5, "0")}.jpg`, jpeg);
     });
-    const jpeg = await canvasToJpeg(canvas);
-    const name = `frame_${String(f).padStart(5, "0")}.jpg`;
-    await ffmpeg.writeFile(name, jpeg);
-    onProgress?.((f / totalFrames) * 0.8); // rendering is ~80% of the work
   }
 
   // Original audio, muxed in untouched (re-encoded to AAC).
@@ -239,17 +378,23 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
       ? ["-preset", "ultrafast", "-crf", "30"]
       : ["-preset", "veryfast", "-crf", "20"];
 
+  // Video input: either the hardware-encoded H.264 stream (mux only, -c:v copy)
+  // or the JPEG frame sequence (encode with wasm libx264).
+  const videoInputArgs = hwStream
+    ? ["-framerate", String(fps), "-i", "video.h264"]
+    : ["-framerate", String(fps), "-i", "frame_%05d.jpg"];
+  const videoCodecArgs = hwStream
+    ? ["-c:v", "copy"]
+    : ["-c:v", "libx264", ...x264, "-pix_fmt", "yuv420p"];
+
   await ffmpeg.exec([
-    "-framerate", String(fps),
-    "-i", "frame_%05d.jpg",
+    ...videoInputArgs,
     // Seek + limit the audio input to the same window the frames cover. With the
     // default full-song range this is "-ss 0 -t <full>", i.e. a no-op.
     "-ss", String(clipStart),
     "-t", String(windowLength),
     "-i", audioName,
-    "-c:v", "libx264",
-    ...x264,
-    "-pix_fmt", "yuv420p",
+    ...videoCodecArgs,
     "-c:a", "aac",
     "-b:a", "192k",
     "-shortest",
