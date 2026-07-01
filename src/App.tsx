@@ -328,6 +328,9 @@ function App() {
     <div className="h-screen w-screen overflow-hidden bg-neutral-950 text-neutral-100 flex flex-col">
       <header className="shrink-0 px-5 py-3 border-b border-neutral-900 flex items-baseline gap-3">
         <h1 className="text-base font-semibold tracking-tight">Lyric Video</h1>
+        <span className="text-[11px] text-neutral-600 tabular-nums">
+          v{__APP_VERSION__}
+        </span>
         <span className="text-xs text-neutral-500">
           {ALL_PRESETS[presetIndex].name} · {ASPECT_OPTIONS[ratioIndex].name}
         </span>
