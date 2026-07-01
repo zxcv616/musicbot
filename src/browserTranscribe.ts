@@ -47,12 +47,13 @@ function loadPipeline(
     const { pipeline, env } = await import("@huggingface/transformers");
     // We only ever fetch models from the Hub, never from our own server path.
     env.allowLocalModels = false;
-    // Serve the ONNX runtime wasm from our own origin. transformers.js otherwise
-    // defaults to a jsDelivr URL pinned to onnxruntime-web's version — which here
-    // is a dev build not published to the CDN, so it 404s in production
-    // ("Failed to fetch"). Files are copied to public/ort/ by the pre dev/build
-    // hook (scripts/copy-ort-wasm.mjs); ONNX appends the variant it needs.
-    if (env.backends?.onnx?.wasm) {
+    // In production, serve the ONNX runtime wasm from our own origin (files are
+    // copied to public/ort/ by scripts/copy-ort-wasm.mjs at build time) instead
+    // of transformers.js's jsDelivr default — one less third-party dependency at
+    // runtime. NOT in dev: Vite's dev server refuses module imports that resolve
+    // into /public ("should not be imported from source code"), so dev uses the
+    // CDN default, which serves the exact pinned version fine.
+    if (!import.meta.env.DEV && env.backends?.onnx?.wasm) {
       env.backends.onnx.wasm.wasmPaths = `${import.meta.env.BASE_URL}ort/`;
     }
     // In production, load model files through our same-origin /hf/ proxy (the
