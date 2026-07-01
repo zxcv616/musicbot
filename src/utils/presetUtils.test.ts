@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildEffectivePreset } from "./presetUtils";
 import { MOOD, TEXT_COLOR_OPTIONS, ASPECT_OPTIONS } from "../presets/mood-preset";
 import { BRAT } from "../presets/brat-preset";
+import { TYPEWRITER } from "../presets/typewriter-preset";
 
 describe("buildEffectivePreset", () => {
   it("preserves the base preset id", () => {
@@ -86,6 +87,31 @@ describe("BRAT preset values", () => {
   it("uses lowercase black text", () => {
     expect(BRAT.text.textTransform).toBe("lowercase");
     expect(BRAT.text.color).toBe("#121212");
+  });
+});
+
+describe("TYPEWRITER preset values", () => {
+  it("uses a bundled monospace font at regular weight", () => {
+    expect(TYPEWRITER.text.fonts.sans).toContain("Courier Prime");
+    expect(TYPEWRITER.text.fonts.sans).toContain("monospace");
+    expect(TYPEWRITER.text.fontWeight).toBe(400);
+  });
+
+  it("is quieter than Mood: smaller text, no motion, lowercase", () => {
+    expect(TYPEWRITER.text.fontSizeVmin).toBeLessThan(MOOD.text.fontSizeVmin);
+    expect(TYPEWRITER.motion.kenBurns.enabled).toBe(false);
+    expect(TYPEWRITER.text.textTransform).toBe("lowercase");
+  });
+
+  it("keeps the filmic treatment (grain, vignette, lifted blacks)", () => {
+    expect(TYPEWRITER.background.grain.opacity).toBeGreaterThan(0);
+    expect(TYPEWRITER.background.vignette.strength).toBeGreaterThan(0);
+    expect(TYPEWRITER.background.liftBlacks).toBeGreaterThan(0);
+  });
+
+  it("has a legibility halo for the thin monospace strokes", () => {
+    expect(TYPEWRITER.text.shadow.opacity).toBeGreaterThan(0);
+    expect(TYPEWRITER.text.shadow.blur).toBeGreaterThan(0);
   });
 });
 

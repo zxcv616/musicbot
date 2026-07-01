@@ -11,12 +11,13 @@ import { exportMoodVideo, type ExportQuality } from "./renderer/exportVideo";
 import type { BackgroundMedia, VideoFit } from "./renderer/moodRenderer";
 import { MOOD, TEXT_COLOR_OPTIONS, ASPECT_OPTIONS } from "./presets/mood-preset";
 import { BRAT } from "./presets/brat-preset";
+import { TYPEWRITER } from "./presets/typewriter-preset";
 import { buildEffectivePreset } from "./utils/presetUtils";
 import { transcribeInBrowser } from "./browserTranscribe";
 import { alignLyrics, wordsToLines } from "./utils/lyricAlign";
 import { TRANSCRIPTION_ENABLED } from "./config";
 
-const ALL_PRESETS = [MOOD, BRAT];
+const ALL_PRESETS = [MOOD, BRAT, TYPEWRITER];
 
 // Smallest exportable clip length (seconds), so the trim handles can't cross.
 const MIN_CLIP_SECONDS = 1;
