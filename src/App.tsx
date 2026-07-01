@@ -54,6 +54,8 @@ function App() {
   const [presetIndex, setPresetIndex] = useState(0);
   const [colorIndex, setColorIndex] = useState(0);
   const [ratioIndex, setRatioIndex] = useState(0);
+  // Multiplier on the preset's font size (1 = preset default).
+  const [textScale, setTextScale] = useState(1);
   // How a video clip shorter than its slot fills the gap (loop vs hold frame).
   const [videoFit, setVideoFit] = useState<VideoFit>("loop");
   const hasVideo = media.some((m) => m.kind === "video");
@@ -63,8 +65,9 @@ function App() {
       ALL_PRESETS[presetIndex],
       TEXT_COLOR_OPTIONS[colorIndex],
       ASPECT_OPTIONS[ratioIndex],
+      textScale,
     ),
-    [presetIndex, colorIndex, ratioIndex],
+    [presetIndex, colorIndex, ratioIndex, textScale],
   );
 
   // Reset text color to each preset's natural default when switching.
@@ -202,9 +205,7 @@ function App() {
     };
   }, [audioUrl]);
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function loadAudioFile(file: File) {
     setAudioFile(file);
     setAudioUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
@@ -217,6 +218,12 @@ function App() {
     setSongDuration(0);
     setTrimStart(0);
     setTrimEnd(0);
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    loadAudioFile(file);
   }
 
   // Dispose media only on unmount (not on every change — videoFit remaps reuse
@@ -234,8 +241,10 @@ function App() {
     );
   }, [videoFit]);
 
-  async function handleMediaChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files ?? []);
+  async function loadMediaFiles(fileList: FileList | File[]) {
+    const files = Array.from(fileList).filter(
+      (f) => f.type.startsWith("image/") || f.type.startsWith("video/"),
+    );
     if (files.length === 0) return;
     const items: BackgroundMedia[] = await Promise.all(
       files.map(async (f): Promise<BackgroundMedia> => {
@@ -267,6 +276,31 @@ function App() {
     });
   }
 
+  async function handleMediaChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files) return;
+    await loadMediaFiles(e.target.files);
+  }
+
+  // Drag-and-drop onto the audio / media upload zones (in addition to click-to-
+  // browse). `zone` tracks which drop target is currently being dragged over,
+  // for the highlight styling below.
+  const [dragZone, setDragZone] = useState<"audio" | "media" | null>(null);
+
+  function handleAudioDrop(e: React.DragEvent<HTMLLabelElement>) {
+    e.preventDefault();
+    setDragZone(null);
+    const file = Array.from(e.dataTransfer.files).find((f) =>
+      f.type.startsWith("audio/"),
+    );
+    if (file) loadAudioFile(file);
+  }
+
+  function handleMediaDrop(e: React.DragEvent<HTMLLabelElement>) {
+    e.preventDefault();
+    setDragZone(null);
+    void loadMediaFiles(e.dataTransfer.files);
+  }
+
   async function handleTranscribe() {
     if (!audioFile) return;
     setStatus("transcribing");
@@ -282,8 +316,13 @@ function App() {
     }
   }
 
-  const uploadLabel =
-    "flex flex-col items-center gap-1 border border-dashed border-neutral-700 rounded-xl p-4 cursor-pointer hover:border-neutral-500 transition-colors text-center";
+  function uploadLabelClass(active: boolean): string {
+    return `flex flex-col items-center gap-1 border border-dashed rounded-xl p-4 cursor-pointer transition-colors text-center ${
+      active
+        ? "border-emerald-500 bg-emerald-500/10"
+        : "border-neutral-700 hover:border-neutral-500"
+    }`;
+  }
 
   return (
     <div className="h-screen w-screen overflow-hidden bg-neutral-950 text-neutral-100 flex flex-col">
@@ -297,9 +336,21 @@ function App() {
       <main className="flex-1 min-h-0 flex">
         {/* LEFT: controls */}
         <aside className="w-72 shrink-0 h-full overflow-y-auto border-r border-neutral-900 p-4 flex flex-col gap-3">
-          <label className={uploadLabel}>
+          <label
+            className={uploadLabelClass(dragZone === "audio")}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragZone("audio");
+            }}
+            onDragLeave={() => setDragZone(null)}
+            onDrop={handleAudioDrop}
+          >
             <span className="text-sm text-neutral-300">
-              {audioFile ? audioFile.name : "Audio file"}
+              {audioFile
+                ? audioFile.name
+                : dragZone === "audio"
+                  ? "Drop audio file here"
+                  : "Audio file"}
             </span>
             <input
               type="file"
@@ -307,14 +358,26 @@ function App() {
               onChange={handleFileChange}
               className="hidden"
             />
-            <span className="text-xs text-neutral-500">mp3 / wav / m4a</span>
+            <span className="text-xs text-neutral-500">
+              mp3 / wav / m4a · drag &amp; drop or click
+            </span>
           </label>
 
-          <label className={uploadLabel}>
+          <label
+            className={uploadLabelClass(dragZone === "media")}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragZone("media");
+            }}
+            onDragLeave={() => setDragZone(null)}
+            onDrop={handleMediaDrop}
+          >
             <span className="text-sm text-neutral-300">
-              {media.length > 0
-                ? `${media.length} clip${media.length > 1 ? "s" : ""} loaded`
-                : "Background images / videos"}
+              {dragZone === "media"
+                ? "Drop images / videos here"
+                : media.length > 0
+                  ? `${media.length} clip${media.length > 1 ? "s" : ""} loaded`
+                  : "Background images / videos"}
             </span>
             <input
               type="file"
@@ -451,6 +514,32 @@ function App() {
                 />
               ))}
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+                Text size
+              </span>
+              {textScale !== 1 && (
+                <button
+                  onClick={() => setTextScale(1)}
+                  className="text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+            <input
+              type="range"
+              min={0.6}
+              max={1.6}
+              step={0.02}
+              value={textScale}
+              onChange={(e) => setTextScale(parseFloat(e.target.value))}
+              aria-label="Lyric text size"
+              className="w-full accent-emerald-500"
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">

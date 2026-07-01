@@ -38,6 +38,18 @@ describe("buildEffectivePreset", () => {
     expect(BRAT.text.color).toBe("#121212");
   });
 
+  it("defaults textScale to 1 (no change to fontSizeVmin)", () => {
+    const ep = buildEffectivePreset(MOOD, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0]);
+    expect(ep.text.fontSizeVmin).toBe(MOOD.text.fontSizeVmin);
+  });
+
+  it("scales fontSizeVmin by textScale", () => {
+    const bigger = buildEffectivePreset(MOOD, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0], 1.5);
+    expect(bigger.text.fontSizeVmin).toBeCloseTo(MOOD.text.fontSizeVmin * 1.5);
+    const smaller = buildEffectivePreset(MOOD, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0], 0.5);
+    expect(smaller.text.fontSizeVmin).toBeCloseTo(MOOD.text.fontSizeVmin * 0.5);
+  });
+
   it("preserves non-overridden preset fields", () => {
     const ep = buildEffectivePreset(BRAT, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0]);
     expect(ep.background.solidColor).toBe("#8ACE00");
