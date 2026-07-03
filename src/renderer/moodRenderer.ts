@@ -104,6 +104,7 @@ export class MoodRenderer {
     this.applyVignette(ctx, width, height);
     this.applyGradients(ctx, width, height);
     this.applyGrain(ctx, width, height, inputs.timeSeconds);
+    this.applyScanlines(ctx, width, height);
 
     // Text sits on top of the grain so lyrics stay crisp and legible.
     this.drawText(ctx, width, height, inputs);
@@ -425,6 +426,43 @@ export class MoodRenderer {
     ctx.restore();
   }
 
+  // --- CRT/VHS scanlines ----------------------------------------------------
+
+  private scanlineTile: HTMLCanvasElement | null = null;
+  private scanlineForSize = { w: 0, h: 0 };
+
+  private applyScanlines(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+  ): void {
+    const sl = this.preset.background.scanlines;
+    if (!sl || sl.opacity <= 0) return;
+
+    if (
+      !this.scanlineTile ||
+      this.scanlineForSize.w !== width ||
+      this.scanlineForSize.h !== height
+    ) {
+      const pitch = Math.max(3, Math.round(height * sl.spacingFrac));
+      const thick = Math.max(1, Math.round(pitch * 0.4));
+      const c = document.createElement("canvas");
+      c.width = width;
+      c.height = height;
+      const sctx = c.getContext("2d");
+      if (!sctx) return;
+      sctx.fillStyle = "#000000";
+      for (let y = 0; y < height; y += pitch) sctx.fillRect(0, y, width, thick);
+      this.scanlineTile = c;
+      this.scanlineForSize = { w: width, h: height };
+    }
+
+    ctx.save();
+    ctx.globalAlpha = sl.opacity;
+    ctx.drawImage(this.scanlineTile, 0, 0);
+    ctx.restore();
+  }
+
   private ensureGrainTiles(width: number, height: number): void {
     if (
       this.grainTiles.length > 0 &&
@@ -515,6 +553,8 @@ export class MoodRenderer {
     // Text is stretched by horizontalScale when drawn, so wrap against the
     // padding-limited width divided by that scale.
     const wrapWidth = maxWidth / tc.horizontalScale;
+    // Justified layout spreads each row across the full wrap column.
+    const justifyWidth = tc.textAlign === "justify" ? wrapWidth : undefined;
 
     const active = lines[activeIndex];
     const nextLine = lines[activeIndex + 1];
@@ -543,19 +583,17 @@ export class MoodRenderer {
       activeRise = (1 - easeOutCubic(inP)) * risePx;
     }
 
-    // Exit: only crossfade the previous line out if a fade-out is configured.
-    // With fadeOut = 0 the previous line is simply gone (hard cut).
+    // Exit: with a fade-out configured, every line fades out over the LAST
+    // fadeOutMs of its own visibility window — before the next line fades in
+    // (sequential, never overlapping: two text blocks dissolving on top of
+    // each other at the same anchor read as mush) and likewise into gaps and
+    // at the song's end. With fadeOut = 0 the line hard-cuts as before.
+    if (fadeOutMs > 0) {
+      activeAlpha *= clamp((visibleUntil - t) / (fadeOutMs / 1000), 0, 1);
+    }
+
     // Blur: fraction of font size → absolute pixels at this resolution.
     const blurPx = (tc.blurFontFrac ?? 0) * fontPx;
-
-    if (fadeOutMs > 0 && activeIndex > 0) {
-      const outP = clamp((t - active.start) / (fadeOutMs / 1000), 0, 1);
-      const prevAlpha = 1 - outP;
-      if (prevAlpha > 0.001) {
-        const prevRows = this.wrapText(ctx, lines[activeIndex - 1].text, wrapWidth);
-        this.drawTextBlock(ctx, prevRows, centerX, anchorY, 0, rowH, prevAlpha, blurPx);
-      }
-    }
 
     // Active (current) line.
     const activeRows = this.wrapText(ctx, active.text, wrapWidth);
@@ -568,6 +606,7 @@ export class MoodRenderer {
       rowH,
       activeAlpha,
       blurPx,
+      justifyWidth,
     );
 
     // Next line, dimmed, sitting just below the current line.
@@ -577,7 +616,9 @@ export class MoodRenderer {
       if (nextAlpha > 0.001) {
         const gap = rowH * 0.35;
         const nextCenterY = activeBottom + gap + (nextRows.length * rowH) / 2;
-        this.drawTextBlock(ctx, nextRows, centerX, nextCenterY, 0, rowH, nextAlpha, blurPx);
+        this.drawTextBlock(
+          ctx, nextRows, centerX, nextCenterY, 0, rowH, nextAlpha, blurPx, justifyWidth,
+        );
       }
     }
 
@@ -589,6 +630,9 @@ export class MoodRenderer {
    * Applies horizontalScale (X) and verticalScale (Y) anchored at that centre
    * so the block expands/contracts symmetrically. Returns block bottom in
    * screen-space pixels (accounting for vertical scale).
+   *
+   * `justifyWidth` (pre-scale units, i.e. the wrap width): when set, each row's
+   * words are spread so the row fills the full column — the poem-column look.
    */
   private drawTextBlock(
     ctx: CanvasRenderingContext2D,
@@ -599,6 +643,7 @@ export class MoodRenderer {
     rowH: number,
     alpha: number,
     blurPx: number,
+    justifyWidth?: number,
   ): number {
     const tc = this.preset.text;
     const total = rows.length * rowH;
@@ -618,12 +663,43 @@ export class MoodRenderer {
 
     if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
 
-    // textAlign is "center", so draw at x = 0 (the translated centre).
-    const drawRows = () => {
+    // Paint each row via `paint` (fill by default; stroke for the outline
+    // ring). textAlign is "center", so paint at x = 0 (the translated centre)
+    // — unless justifying, where each word is placed across the column.
+    type Painter = (text: string, x: number, y: number) => void;
+    const fillPainter: Painter = (s, x, y) => ctx.fillText(s, x, y);
+    const drawRows = (paint: Painter = fillPainter) => {
       for (let i = 0; i < rows.length; i++) {
-        ctx.fillText(rows[i], 0, -total / 2 + rowH * (i + 0.5));
+        const y = -total / 2 + rowH * (i + 0.5);
+        if (justifyWidth === undefined) {
+          paint(rows[i], 0, y);
+          continue;
+        }
+        const words = rows[i].split(" ");
+        if (words.length === 1) {
+          // A lone word can't be spread; anchor it at the column's left edge.
+          const prev = ctx.textAlign;
+          ctx.textAlign = "left";
+          paint(words[0], -justifyWidth / 2, y);
+          ctx.textAlign = prev;
+          continue;
+        }
+        const widths = words.map((w) => ctx.measureText(w).width);
+        const used = widths.reduce((a, b) => a + b, 0);
+        const gap = (justifyWidth - used) / (words.length - 1);
+        const prev = ctx.textAlign;
+        ctx.textAlign = "left";
+        let x = -justifyWidth / 2;
+        for (let w = 0; w < words.length; w++) {
+          paint(words[w], x, y);
+          x += widths[w] + gap;
+        }
+        ctx.textAlign = prev;
       }
     };
+
+    // Font size in pre-scale pixels, for effect sizing (rowH = fontPx × lineHeight).
+    const fontPx = rowH / tc.lineHeight;
 
     if (tc.shadow.opacity > 0 && tc.shadow.blur > 0) {
       // Two soft dark passes build a legibility halo that survives busy/bright
@@ -635,6 +711,37 @@ export class MoodRenderer {
       ctx.shadowColor = "rgba(0,0,0,0)";
       ctx.shadowBlur = 0;
     }
+
+    // Chromatic-aberration ghosts: red/cyan copies offset left/right under the
+    // fill — reads as VHS chroma bleed on the letter edges.
+    const chroma = tc.chromatic;
+    if (chroma && chroma.opacity > 0 && chroma.offsetFrac > 0) {
+      const d = chroma.offsetFrac * fontPx;
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      ctx.globalAlpha = alpha * chroma.opacity;
+      ctx.fillStyle = "#FF3355";
+      ctx.translate(-d, 0);
+      drawRows();
+      ctx.translate(2 * d, 0);
+      ctx.fillStyle = "#33CCFF";
+      drawRows();
+      ctx.restore();
+    }
+
+    // Outline ring hugging the glyph edges (drawn under the crisp fill so the
+    // inner half of the stroke is covered — what remains is the outer ring).
+    const outline = tc.outline;
+    if (outline && outline.opacity > 0 && outline.widthFrac > 0) {
+      ctx.save();
+      ctx.globalAlpha = alpha * outline.opacity;
+      ctx.strokeStyle = outline.color;
+      ctx.lineWidth = outline.widthFrac * fontPx;
+      ctx.lineJoin = "round";
+      drawRows((s, x, y) => ctx.strokeText(s, x, y));
+      ctx.restore();
+    }
+
     drawRows();
 
     ctx.restore();

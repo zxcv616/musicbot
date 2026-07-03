@@ -45,6 +45,10 @@ export interface BackgroundConfig {
   // Film grain (animated — regenerate/scroll noise each frame).
   grain: { opacity: number; size: number; animated: boolean };  // opacity 0..1
 
+  // Optional CRT/VHS scanlines: dark horizontal lines across the whole frame.
+  // spacingFrac = line pitch as a fraction of frame height (~0.005 ≈ 10px @1920).
+  scanlines?: { opacity: number; spacingFrac: number };
+
   // Optional light leak / bloom. OFF by default — very easy to overdo.
   lightLeak: { enabled: boolean; opacity: number };
 
@@ -85,7 +89,10 @@ export interface TextConfig {
   // line exceeds clearGapSeconds (so back-to-back lines never flicker).
   lineHoldSeconds: number;
   clearGapSeconds: number;
-  textAlign: "center";
+  // "center": rows centred (default). "justify": rows spread so both edges of
+  // the wrap column align — the narrow poem-column look. Column width is set
+  // via horizontalPaddingVw (large padding = narrow column).
+  textAlign: "center" | "justify";
   // Vertical anchor: fraction of frame height for the text baseline zone.
   // ~0.5–0.62 keeps it in the mobile eye-focus center third, not dead center.
   verticalAnchor: number;
@@ -93,6 +100,14 @@ export interface TextConfig {
 
   // Legibility: soft shadow/glow behind text rather than a hard drop shadow.
   shadow: { color: string; blur: number; opacity: number };
+
+  // Optional stroke ring hugging the glyph edges (VHS chroma-bleed halo).
+  // widthFrac = stroke width as a fraction of the font size.
+  outline?: { color: string; widthFrac: number; opacity: number };
+
+  // Optional chromatic-aberration ghosts: red/cyan copies offset horizontally
+  // under the main fill. offsetFrac = offset as a fraction of the font size.
+  chromatic?: { offsetFrac: number; opacity: number };
 
   // Per-line entrance/exit animation.
   lineIn:  { fadeMs: number; riseVh: number };  // riseVh = px-rise as % of frame height
