@@ -12,12 +12,24 @@ import type { BackgroundMedia, VideoFit } from "./renderer/moodRenderer";
 import { MOOD, TEXT_COLOR_OPTIONS, ASPECT_OPTIONS } from "./presets/mood-preset";
 import { BRAT } from "./presets/brat-preset";
 import { TYPEWRITER } from "./presets/typewriter-preset";
+import { GRIT } from "./presets/grit-preset";
+import { POEM } from "./presets/poem-preset";
 import { buildEffectivePreset } from "./utils/presetUtils";
 import { transcribeInBrowser } from "./browserTranscribe";
 import { alignLyrics, wordsToLines } from "./utils/lyricAlign";
 import { TRANSCRIPTION_ENABLED } from "./config";
 
-const ALL_PRESETS = [MOOD, BRAT, TYPEWRITER];
+const ALL_PRESETS = [MOOD, BRAT, TYPEWRITER, GRIT, POEM];
+
+// Each preset's natural default text colour (index into TEXT_COLOR_OPTIONS):
+// Mood/Typewriter → Cream, Brat → Black (on lime), Grit/Poem → White.
+const DEFAULT_COLOR_INDEX: Record<string, number> = {
+  mood: 0,
+  brat: 2,
+  typewriter: 0,
+  grit: 1,
+  poem: 1,
+};
 
 // Smallest exportable clip length (seconds), so the trim handles can't cross.
 const MIN_CLIP_SECONDS = 1;
@@ -72,9 +84,8 @@ function App() {
   );
 
   // Reset text color to each preset's natural default when switching.
-  // Mood → Cream (index 0); Brat → Black (index 2, black on lime).
   useEffect(() => {
-    setColorIndex(presetIndex === 1 ? 2 : 0);
+    setColorIndex(DEFAULT_COLOR_INDEX[ALL_PRESETS[presetIndex].id] ?? 0);
   }, [presetIndex]);
 
   // Editable lyric lines, seeded from the transcription (word-level timing) and
@@ -481,7 +492,7 @@ function App() {
             <span className="text-[11px] uppercase tracking-wide text-neutral-500">
               Preset
             </span>
-            <div className="flex gap-1.5">
+            <div className="grid grid-cols-3 gap-1.5">
               {ALL_PRESETS.map((p, i) => (
                 <button
                   key={p.id}

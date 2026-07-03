@@ -8,6 +8,8 @@ import "@fontsource/arimo/400.css";
 import "@fontsource/arimo/700.css";
 // Courier Prime for the Typewriter preset, same reasoning.
 import "@fontsource/courier-prime/400.css";
+// Anton (heavy Impact-style condensed) for the Grit preset.
+import "@fontsource/anton/400.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -3,6 +3,8 @@ import { buildEffectivePreset } from "./presetUtils";
 import { MOOD, TEXT_COLOR_OPTIONS, ASPECT_OPTIONS } from "../presets/mood-preset";
 import { BRAT } from "../presets/brat-preset";
 import { TYPEWRITER } from "../presets/typewriter-preset";
+import { GRIT } from "../presets/grit-preset";
+import { POEM } from "../presets/poem-preset";
 
 describe("buildEffectivePreset", () => {
   it("preserves the base preset id", () => {
@@ -112,6 +114,53 @@ describe("TYPEWRITER preset values", () => {
   it("has a legibility halo for the thin monospace strokes", () => {
     expect(TYPEWRITER.text.shadow.opacity).toBeGreaterThan(0);
     expect(TYPEWRITER.text.shadow.blur).toBeGreaterThan(0);
+  });
+});
+
+describe("GRIT preset values", () => {
+  it("uses heavy condensed caps (Anton) at dominant size", () => {
+    expect(GRIT.text.fonts.sans).toContain("Anton");
+    expect(GRIT.text.textTransform).toBe("uppercase");
+    expect(GRIT.text.fontSizeVmin).toBeGreaterThan(MOOD.text.fontSizeVmin);
+  });
+
+  it("crushes blacks instead of lifting them", () => {
+    expect(GRIT.background.liftBlacks).toBe(0);
+    expect(GRIT.background.contrast).toBeGreaterThan(1);
+    expect(GRIT.background.brightness).toBeLessThan(0.9);
+  });
+
+  it("glows light-on-light rather than a dark halo", () => {
+    expect(GRIT.text.color).toBe("#FFFFFF");
+    expect(GRIT.text.shadow.color).not.toBe("#000000");
+    expect(GRIT.text.shadow.blur).toBeGreaterThan(15);
+  });
+
+  it("has the VHS treatment: ring, chromatic ghosts, scanlines", () => {
+    expect(GRIT.text.outline?.opacity).toBeGreaterThan(0);
+    expect(GRIT.text.outline?.widthFrac).toBeGreaterThan(0);
+    expect(GRIT.text.chromatic?.opacity).toBeGreaterThan(0);
+    expect(GRIT.background.scanlines?.opacity).toBeGreaterThan(0);
+  });
+});
+
+describe("POEM preset values", () => {
+  it("justifies a narrow column of small lowercase text", () => {
+    expect(POEM.text.textAlign).toBe("justify");
+    expect(POEM.text.horizontalPaddingVw).toBeGreaterThan(20); // narrow column
+    expect(POEM.text.fontSizeVmin).toBeLessThan(TYPEWRITER.text.fontSizeVmin);
+    expect(POEM.text.textTransform).toBe("lowercase");
+  });
+
+  it("keeps the background nearly untreated", () => {
+    expect(POEM.background.saturation).toBeGreaterThanOrEqual(0.85);
+    expect(POEM.background.grain.opacity).toBeLessThan(0.06);
+    expect(POEM.motion.kenBurns.enabled).toBe(false);
+  });
+
+  it("hard-cuts between lines like the reference (no fades)", () => {
+    expect(POEM.text.lineIn.fadeMs).toBe(0);
+    expect(POEM.text.lineOut.fadeMs).toBe(0);
   });
 });
 
