@@ -5,6 +5,7 @@ import { BRAT } from "../presets/brat-preset";
 import { TYPEWRITER } from "../presets/typewriter-preset";
 import { GRIT } from "../presets/grit-preset";
 import { POEM } from "../presets/poem-preset";
+import { GRACE } from "../presets/grace-preset";
 
 describe("buildEffectivePreset", () => {
   it("preserves the base preset id", () => {
@@ -161,6 +162,26 @@ describe("POEM preset values", () => {
   it("hard-cuts between lines like the reference (no fades)", () => {
     expect(POEM.text.lineIn.fadeMs).toBe(0);
     expect(POEM.text.lineOut.fadeMs).toBe(0);
+  });
+});
+
+describe("GRACE preset values", () => {
+  it("uses a high-contrast serif as its default font", () => {
+    expect(GRACE.text.defaultFont).toBe("serif");
+    expect(GRACE.text.fonts.serif).toContain("Playfair Display");
+    expect(GRACE.text.textTransform).toBe("lowercase");
+  });
+
+  it("keeps the footage vivid rather than faded", () => {
+    expect(GRACE.background.saturation).toBeGreaterThanOrEqual(1);
+    expect(GRACE.background.liftBlacks).toBe(0);
+    expect(GRACE.background.grain.opacity).toBe(0);
+  });
+
+  it("carries legibility on the text (shadow + thin edge), not the grade", () => {
+    expect(GRACE.text.shadow.opacity).toBeGreaterThan(0);
+    expect(GRACE.text.outline?.opacity).toBeGreaterThan(0);
+    expect(GRACE.text.color).toBe("#FFFFFF");
   });
 });
 

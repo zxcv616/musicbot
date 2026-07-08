@@ -10,6 +10,8 @@ import "@fontsource/arimo/700.css";
 import "@fontsource/courier-prime/400.css";
 // Anton (heavy Impact-style condensed) for the Grit preset.
 import "@fontsource/anton/400.css";
+// Playfair Display (high-contrast elegant serif) for the Grace preset.
+import "@fontsource/playfair-display/400.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
