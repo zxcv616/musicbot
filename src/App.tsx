@@ -15,15 +15,17 @@ import { TYPEWRITER } from "./presets/typewriter-preset";
 import { GRIT } from "./presets/grit-preset";
 import { POEM } from "./presets/poem-preset";
 import { GRACE } from "./presets/grace-preset";
+import { CHROMA } from "./presets/chroma-preset";
 import { buildEffectivePreset } from "./utils/presetUtils";
 import { transcribeInBrowser } from "./browserTranscribe";
 import { alignLyrics, wordsToLines } from "./utils/lyricAlign";
+import { serializeLyrics, parseLyricsFile } from "./utils/lyricFile";
 import { TRANSCRIPTION_ENABLED } from "./config";
 
-const ALL_PRESETS = [MOOD, BRAT, TYPEWRITER, GRIT, POEM, GRACE];
+const ALL_PRESETS = [MOOD, BRAT, TYPEWRITER, GRIT, POEM, GRACE, CHROMA];
 
 // Each preset's natural default text colour (index into TEXT_COLOR_OPTIONS):
-// Mood/Typewriter → Cream, Brat → Black (on lime), Grit/Poem/Grace → White.
+// Mood/Typewriter → Cream, Brat → Black (on lime), the rest → White.
 const DEFAULT_COLOR_INDEX: Record<string, number> = {
   mood: 0,
   brat: 2,
@@ -31,6 +33,7 @@ const DEFAULT_COLOR_INDEX: Record<string, number> = {
   grit: 1,
   poem: 1,
   grace: 1,
+  chroma: 1,
 };
 
 // Smallest exportable clip length (seconds), so the trim handles can't cross.
@@ -146,6 +149,45 @@ function App() {
     void audio.play();
   }
 
+  // Save / load the lyric set (text + timings) as a small JSON file, so timing
+  // work survives a closed tab. Fully client-side.
+  const [dragLyrics, setDragLyrics] = useState(false);
+
+  function handleDownloadLyrics() {
+    if (lines.length === 0) return;
+    const blob = new Blob([serializeLyrics(lines)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const base = audioFile ? audioFile.name.replace(/\.[^.]+$/, "") : "lyrics";
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${base}-lyrics.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function loadLyricsFile(file: File) {
+    try {
+      const parsed = parseLyricsFile(await file.text());
+      setLines(parsed.map((l) => ({ ...l, id: crypto.randomUUID() })));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  function handleLyricsFileInput(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) void loadLyricsFile(file);
+    e.target.value = ""; // allow re-selecting the same file
+  }
+
+  function handleLyricsDrop(e: React.DragEvent<HTMLElement>) {
+    e.preventDefault();
+    setDragLyrics(false);
+    const file = e.dataTransfer.files[0];
+    if (file) void loadLyricsFile(file);
+  }
+
   // Export trim: the song-time window [trimStart, trimEnd] to render. Seeded to
   // the full song once metadata loads; reset when a new file is chosen.
   const [songDuration, setSongDuration] = useState(0);
@@ -176,8 +218,12 @@ function App() {
   const [exportProgress, setExportProgress] = useState(0);
   const exporting = exportMode !== null;
 
+  // Solid-colour presets (Brat, Chroma) have a baked-in background, so an
+  // uploaded image/video is optional — the colour field is the background.
+  const hasBackground =
+    media.length > 0 || !!effectivePreset.background.solidColor;
   const canExport =
-    media.length > 0 &&
+    hasBackground &&
     lines.length > 0 &&
     !!audioFile &&
     Number.isFinite(audioRef.current?.duration ?? NaN);
@@ -704,7 +750,9 @@ function App() {
                 ? `${ASPECT_OPTIONS[ratioIndex].name} · 30fps · ${
                     trimmed ? `${fmtClock(trimEnd - trimStart)} clip` : "full song"
                   } · draft is half-res`
-                : "Add audio, media & lyrics to export"}
+                : hasBackground
+                  ? "Add audio & lyrics to export"
+                  : "Add audio, a background & lyrics to export"}
             </p>
           </div>
         </aside>
@@ -731,7 +779,43 @@ function App() {
         </section>
 
         {/* RIGHT: lyric/timing editor (scrolls within itself) */}
-        <aside className="w-96 shrink-0 h-full border-l border-neutral-900 p-4 flex flex-col min-h-0">
+        <aside
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragLyrics(true);
+          }}
+          onDragLeave={() => setDragLyrics(false)}
+          onDrop={handleLyricsDrop}
+          className={`w-96 shrink-0 h-full border-l p-4 flex flex-col min-h-0 transition-colors ${
+            dragLyrics
+              ? "border-emerald-500 bg-emerald-500/5"
+              : "border-neutral-900"
+          }`}
+        >
+          {/* Save / load the lyric set (text + timings) as a JSON file. */}
+          <div className="shrink-0 flex items-center gap-2 pb-3 mb-3 border-b border-neutral-900">
+            <button
+              onClick={handleDownloadLyrics}
+              disabled={lines.length === 0}
+              title="Download your lyrics + timings as a file to reload later"
+              className="rounded-md bg-neutral-800 text-neutral-200 px-2.5 py-1 text-xs font-medium hover:bg-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              Save lyrics
+            </button>
+            <label className="rounded-md bg-neutral-800 text-neutral-200 px-2.5 py-1 text-xs font-medium hover:bg-neutral-700 cursor-pointer transition-colors">
+              Load lyrics
+              <input
+                type="file"
+                accept="application/json,.json"
+                onChange={handleLyricsFileInput}
+                className="hidden"
+              />
+            </label>
+            <span className="text-[11px] text-neutral-600 leading-tight">
+              {dragLyrics ? "Drop lyrics file to load" : "or drag a file here"}
+            </span>
+          </div>
+
           {audioUrl ? (
             <LyricEditor
               lines={lines}
@@ -742,6 +826,8 @@ function App() {
           ) : (
             <div className="m-auto text-center text-sm text-neutral-600">
               Upload audio, then transcribe or add lyric lines here.
+              <br />
+              <span className="text-xs">Or drop a saved lyrics file to reload it.</span>
             </div>
           )}
         </aside>
