@@ -314,8 +314,10 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
       // frame-accurate (and honours loop/freeze + crossfades, since the layer set
       // and local times come straight from the shared schedule).
       for (const layer of renderer.visibleAt(t, schedule)) {
+        // With no media (solid-colour presets) the schedule still has one slot
+        // but there's no item to seek — the colour field is the background.
         const item = exportMedia[layer.index];
-        if (item.kind === "video") {
+        if (item?.kind === "video") {
           const local = renderer.clipLocalTime(
             schedule[layer.index],
             item.duration,
