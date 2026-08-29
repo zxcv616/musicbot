@@ -718,7 +718,10 @@ export class MoodRenderer {
     if (chroma && chroma.opacity > 0 && chroma.offsetFrac > 0) {
       const d = chroma.offsetFrac * fontPx;
       ctx.save();
-      ctx.globalCompositeOperation = "lighter";
+      // Additive ("lighter") glows over dark backgrounds (Grit); solid
+      // ("source-over") copies give clean anaglyph edges over bright fields.
+      ctx.globalCompositeOperation =
+        chroma.additive === false ? "source-over" : "lighter";
       ctx.globalAlpha = alpha * chroma.opacity;
       ctx.fillStyle = "#FF3355";
       ctx.translate(-d, 0);

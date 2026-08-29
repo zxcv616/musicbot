@@ -6,6 +6,7 @@ import { TYPEWRITER } from "../presets/typewriter-preset";
 import { GRIT } from "../presets/grit-preset";
 import { POEM } from "../presets/poem-preset";
 import { GRACE } from "../presets/grace-preset";
+import { CHROMA } from "../presets/chroma-preset";
 
 describe("buildEffectivePreset", () => {
   it("preserves the base preset id", () => {
@@ -182,6 +183,20 @@ describe("GRACE preset values", () => {
     expect(GRACE.text.shadow.opacity).toBeGreaterThan(0);
     expect(GRACE.text.outline?.opacity).toBeGreaterThan(0);
     expect(GRACE.text.color).toBe("#FFFFFF");
+  });
+});
+
+describe("CHROMA preset values", () => {
+  it("is a flat solid-colour field with grain texture", () => {
+    expect(CHROMA.background.solidColor).toBeDefined();
+    expect(CHROMA.background.vignette.strength).toBe(0);
+    expect(CHROMA.background.grain.opacity).toBeGreaterThan(0);
+  });
+
+  it("has the chromatic-aberration fringe on big lowercase sans", () => {
+    expect(CHROMA.text.chromatic?.opacity).toBeGreaterThan(0);
+    expect(CHROMA.text.textTransform).toBe("lowercase");
+    expect(CHROMA.text.fontSizeVmin).toBeGreaterThan(MOOD.text.fontSizeVmin);
   });
 });
 

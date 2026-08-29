@@ -107,7 +107,9 @@ export interface TextConfig {
 
   // Optional chromatic-aberration ghosts: red/cyan copies offset horizontally
   // under the main fill. offsetFrac = offset as a fraction of the font size.
-  chromatic?: { offsetFrac: number; opacity: number };
+  // additive (default true): "lighter" blend — glows over dark backgrounds.
+  // Set false for solid offset copies (clean anaglyph fringe over bright fields).
+  chromatic?: { offsetFrac: number; opacity: number; additive?: boolean };
 
   // Per-line entrance/exit animation.
   lineIn:  { fadeMs: number; riseVh: number };  // riseVh = px-rise as % of frame height
