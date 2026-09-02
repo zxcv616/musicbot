@@ -21,6 +21,19 @@ export interface LyricPreset {
   background: BackgroundConfig;
   text: TextConfig;
   motion: MotionConfig;
+
+  // --- Runtime-injected via buildEffectivePreset (not set per-preset) ---
+  /**
+   * Extra animated noise overlaid on every frame (0..1), on top of the preset's
+   * own `background.grain`. Adds filmic texture and per-frame pixel variation to
+   * every preset (including grain-free ones). Set from the "Grain / Noise" slider.
+   */
+  noiseIntensity?: number;
+  /**
+   * Mirror the background media horizontally (the text stays un-flipped). Changes
+   * the video's fingerprint with no visual cost. Set from the "Flip" toggle.
+   */
+  flipX?: boolean;
 }
 
 export interface OutputConfig {

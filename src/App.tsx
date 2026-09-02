@@ -48,6 +48,26 @@ function fmtClock(t: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+/**
+ * Decode an uploaded image and return a metadata-free bitmap. createImageBitmap
+ * already yields raw decoded pixels (no EXIF/ICC), and the canvas round-trip
+ * guarantees nothing from the source file carries into the pipeline — losslessly
+ * (no re-compression, so image quality is untouched).
+ */
+async function scrubImageBitmap(file: File): Promise<ImageBitmap> {
+  const src = await createImageBitmap(file);
+  const canvas = document.createElement("canvas");
+  canvas.width = src.width;
+  canvas.height = src.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return src; // fall back to the (already metadata-free) decode
+  ctx.drawImage(src, 0, 0);
+  src.close();
+  const clean = await createImageBitmap(canvas);
+  console.info(`Metadata scrubbed: ${file.name}`);
+  return clean;
+}
+
 function disposeMedia(items: BackgroundMedia[]): void {
   for (const m of items) {
     if (m.kind === "image") {
@@ -76,6 +96,10 @@ function App() {
   const [ratioIndex, setRatioIndex] = useState(0);
   // Multiplier on the preset's font size (1 = preset default).
   const [textScale, setTextScale] = useState(1);
+  // Universal animated noise overlay amount (0..1), default 15%.
+  const [noiseIntensity, setNoiseIntensity] = useState(0.15);
+  // Mirror the background media horizontally (text unaffected).
+  const [flipX, setFlipX] = useState(false);
   // How a video clip shorter than its slot fills the gap (loop vs hold frame).
   const [videoFit, setVideoFit] = useState<VideoFit>("loop");
   const hasVideo = media.some((m) => m.kind === "video");
@@ -86,8 +110,10 @@ function App() {
       TEXT_COLOR_OPTIONS[colorIndex],
       ASPECT_OPTIONS[ratioIndex],
       textScale,
+      noiseIntensity,
+      flipX,
     ),
-    [presetIndex, colorIndex, ratioIndex, textScale],
+    [presetIndex, colorIndex, ratioIndex, textScale, noiseIntensity, flipX],
   );
 
   // Reset text color to each preset's natural default when switching.
@@ -327,9 +353,12 @@ function App() {
           } catch {
             /* not seekable yet */
           }
+          // Video frames are re-rendered through the canvas on export, so the
+          // source file's metadata never reaches the output.
+          console.info(`Metadata scrubbed (frames re-rendered): ${f.name}`);
           return { kind: "video", video, duration: video.duration, fit: videoFit };
         }
-        return { kind: "image", image: await createImageBitmap(f) };
+        return { kind: "image", image: await scrubImageBitmap(f) };
       }),
     );
     setMedia((prev) => {
@@ -608,6 +637,27 @@ function App() {
           </div>
 
           <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+                Grain / Noise
+              </span>
+              <span className="text-[11px] tabular-nums text-neutral-400">
+                {Math.round(noiseIntensity * 100)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={noiseIntensity}
+              onChange={(e) => setNoiseIntensity(parseFloat(e.target.value))}
+              aria-label="Grain / noise amount"
+              className="w-full accent-emerald-500"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
             <span className="text-[11px] uppercase tracking-wide text-neutral-500">
               Aspect ratio
             </span>
@@ -626,6 +676,24 @@ function App() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+              Background
+            </span>
+            <button
+              onClick={() => setFlipX((v) => !v)}
+              title="Mirror the background horizontally (text stays the same). Changes the video's fingerprint with no visual cost."
+              className={`flex items-center justify-between rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                flipX
+                  ? "bg-neutral-100 text-neutral-900"
+                  : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+              }`}
+            >
+              <span>Flip horizontally</span>
+              <span className="text-[11px] opacity-70">{flipX ? "on" : "off"}</span>
+            </button>
           </div>
 
           {TRANSCRIPTION_ENABLED && status === "transcribing" && (

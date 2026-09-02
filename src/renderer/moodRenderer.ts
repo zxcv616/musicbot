@@ -67,6 +67,11 @@ export class MoodRenderer {
   private grainForSize = { w: 0, h: 0 };
   private readonly grainPoolSize = 16;
 
+  // Separate pool for the universal noise overlay (noiseIntensity), so it works
+  // even on presets whose own background.grain is zero.
+  private noiseTiles: HTMLCanvasElement[] = [];
+  private noiseForSize = { w: 0, h: 0 };
+
   constructor(preset: LyricPreset) {
     this.preset = preset;
   }
@@ -97,7 +102,18 @@ export class MoodRenderer {
       ctx.fillRect(0, 0, width, height);
     }
 
-    this.drawBackground(ctx, width, height, inputs);
+    // Optionally mirror the background media horizontally. The solid fill above
+    // and the overlays below are symmetric, so flipping only the media draw is
+    // enough — and the text (drawn later) stays un-flipped.
+    if (this.preset.flipX) {
+      ctx.save();
+      ctx.translate(width, 0);
+      ctx.scale(-1, 1);
+      this.drawBackground(ctx, width, height, inputs);
+      ctx.restore();
+    } else {
+      this.drawBackground(ctx, width, height, inputs);
+    }
 
     this.applyTint(ctx, width, height);
     this.applyLiftBlacks(ctx, width, height);
@@ -105,6 +121,8 @@ export class MoodRenderer {
     this.applyGradients(ctx, width, height);
     this.applyGrain(ctx, width, height, inputs.timeSeconds);
     this.applyScanlines(ctx, width, height);
+    // Universal animated noise overlay (every preset, hash-breaking + texture).
+    this.applyNoiseOverlay(ctx, width, height, inputs.timeSeconds);
 
     // Text sits on top of the grain so lyrics stay crisp and legible.
     this.drawText(ctx, width, height, inputs);
@@ -471,15 +489,23 @@ export class MoodRenderer {
     ) {
       return;
     }
-
     const { grain } = this.preset.background;
     // Generate noise at reduced resolution; drawn scaled up (smoothing off) so
     // each grain speck is roughly `grain.size` device pixels across.
     const gw = Math.max(1, Math.round(width / grain.size));
     const gh = Math.max(1, Math.round(height / grain.size));
+    this.grainTiles = MoodRenderer.buildNoiseTiles(gw, gh, this.grainPoolSize);
+    this.grainForSize = { w: width, h: height };
+  }
 
+  /** A pool of monochrome random-noise tiles, cycled per frame for animation. */
+  private static buildNoiseTiles(
+    gw: number,
+    gh: number,
+    count: number,
+  ): HTMLCanvasElement[] {
     const tiles: HTMLCanvasElement[] = [];
-    for (let t = 0; t < this.grainPoolSize; t++) {
+    for (let t = 0; t < count; t++) {
       const c = document.createElement("canvas");
       c.width = gw;
       c.height = gh;
@@ -497,9 +523,47 @@ export class MoodRenderer {
       gctx.putImageData(imgData, 0, 0);
       tiles.push(c);
     }
+    return tiles;
+  }
 
-    this.grainTiles = tiles;
-    this.grainForSize = { w: width, h: height };
+  // --- Universal animated noise overlay (noiseIntensity) -------------------
+
+  private applyNoiseOverlay(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    timeSeconds: number,
+  ): void {
+    const intensity = this.preset.noiseIntensity ?? 0;
+    if (intensity <= 0) return;
+
+    // Fine, fixed cell so it reads as crisp static regardless of the preset's
+    // own grain size, and always animates (per-frame pixel variation).
+    if (
+      this.noiseTiles.length === 0 ||
+      this.noiseForSize.w !== width ||
+      this.noiseForSize.h !== height
+    ) {
+      const gw = Math.max(1, Math.round(width / 1.5));
+      const gh = Math.max(1, Math.round(height / 1.5));
+      this.noiseTiles = MoodRenderer.buildNoiseTiles(gw, gh, this.grainPoolSize);
+      this.noiseForSize = { w: width, h: height };
+    }
+    if (this.noiseTiles.length === 0) return;
+
+    const frame = Math.floor(timeSeconds * this.preset.output.fps);
+    const index =
+      ((frame % this.noiseTiles.length) + this.noiseTiles.length) %
+      this.noiseTiles.length;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "overlay";
+    // Map 0..1 to a tasteful opacity ceiling: 0.15 (default) reads as subtle
+    // texture, 1.0 is strong but not blown out.
+    ctx.globalAlpha = Math.min(1, intensity) * 0.5;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.noiseTiles[index], 0, 0, width, height);
+    ctx.restore();
   }
 
   // --- Lyric text ----------------------------------------------------------

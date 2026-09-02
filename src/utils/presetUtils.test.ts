@@ -56,6 +56,18 @@ describe("buildEffectivePreset", () => {
     expect(smaller.text.fontSizeVmin).toBeCloseTo(MOOD.text.fontSizeVmin * 0.5);
   });
 
+  it("injects noiseIntensity and flipX (default off, and does not mutate base)", () => {
+    const def = buildEffectivePreset(MOOD, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0]);
+    expect(def.noiseIntensity).toBe(0);
+    expect(def.flipX).toBe(false);
+    const set = buildEffectivePreset(
+      MOOD, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0], 1, 0.15, true,
+    );
+    expect(set.noiseIntensity).toBeCloseTo(0.15);
+    expect(set.flipX).toBe(true);
+    expect(MOOD.flipX).toBeUndefined(); // base preset untouched
+  });
+
   it("preserves non-overridden preset fields", () => {
     const ep = buildEffectivePreset(BRAT, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0]);
     expect(ep.background.solidColor).toBe("#8ACE00");
