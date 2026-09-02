@@ -1,0 +1,6 @@
+# Files here are excluded from the Cloudflare Workers asset upload (gitignore
+# syntax). ffmpeg's core is loaded from a CDN at runtime and is never served
+# from our own origin — but some build configs emit it into dist, where its
+# ~31 MiB size trips Cloudflare's 25 MiB per-asset limit and fails the deploy.
+ffmpeg-core.wasm
+ffmpeg-core.js
