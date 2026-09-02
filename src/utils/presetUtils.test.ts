@@ -202,18 +202,19 @@ describe("CHROMA preset values", () => {
 });
 
 describe("HAZE preset values", () => {
-  it("is a blurred, glowing white text on a solid dark field", () => {
+  it("is crisp white text with a tight halo on a solid dark field", () => {
     expect(HAZE.background.solidColor).toBeDefined();
-    expect(HAZE.text.blurFontFrac).toBeGreaterThan(0);       // soft-focus
-    expect(HAZE.text.shadow.color).toBe("#FFFFFF");          // white bloom
+    expect(HAZE.text.blurFontFrac).toBe(0);                  // crisp, not soft-focus
+    expect(HAZE.text.shadow.color).toBe("#FFFFFF");          // white halo
     expect(HAZE.text.shadow.opacity).toBeGreaterThan(0);
     expect(HAZE.text.color).toBe("#FFFFFF");
   });
 
-  it("uses justified two-word-per-row columns, heavy grain, no chromatic", () => {
+  it("uses justified two-word-per-row columns, fine static grain, no chromatic", () => {
     expect(HAZE.text.textAlign).toBe("justify");
     expect(HAZE.text.wrapMaxWords).toBe(2);
     expect(HAZE.background.grain.opacity).toBeGreaterThan(0.1);
+    expect(HAZE.background.grain.size).toBeLessThanOrEqual(1); // fine per-pixel static
     expect(HAZE.text.chromatic).toBeUndefined();
   });
 });
