@@ -93,6 +93,10 @@ export interface TextConfig {
   // the wrap column align — the narrow poem-column look. Column width is set
   // via horizontalPaddingVw (large padding = narrow column).
   textAlign: "center" | "justify";
+  // Optional hard cap on words per wrapped row. Undefined = fill each row to
+  // the column width (normal wrapping); a small number forces deliberate
+  // stacked chunks (e.g. 2 → two words per row, justify-spread into columns).
+  wrapMaxWords?: number;
   // Vertical anchor: fraction of frame height for the text baseline zone.
   // ~0.5–0.62 keeps it in the mobile eye-focus center third, not dead center.
   verticalAnchor: number;

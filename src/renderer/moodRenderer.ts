@@ -766,15 +766,21 @@ export class MoodRenderer {
           ? text.toUpperCase()
           : text;
     const words = cased.trim().split(/\s+/).filter(Boolean);
+    // Optional hard cap on words per row, for deliberate stacked-chunk layouts
+    // (e.g. Haze's two-word columns) rather than filling each row to the edge.
+    const maxWords = this.preset.text.wrapMaxWords ?? Infinity;
     const rows: string[] = [];
     let cur = "";
+    let curCount = 0;
     for (const w of words) {
       const test = cur ? `${cur} ${w}` : w;
-      if (cur && ctx.measureText(test).width > maxWidth) {
+      if (cur && (curCount >= maxWords || ctx.measureText(test).width > maxWidth)) {
         rows.push(cur);
         cur = w;
+        curCount = 1;
       } else {
         cur = test;
+        curCount++;
       }
     }
     if (cur) rows.push(cur);
