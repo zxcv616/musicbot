@@ -7,6 +7,7 @@ import { GRIT } from "../presets/grit-preset";
 import { POEM } from "../presets/poem-preset";
 import { GRACE } from "../presets/grace-preset";
 import { HAZE } from "../presets/haze-preset";
+import { PAPER } from "../presets/paper-preset";
 import { CHROMA } from "../presets/chroma-preset";
 
 describe("buildEffectivePreset", () => {
@@ -228,6 +229,22 @@ describe("HAZE preset values", () => {
     expect(HAZE.background.grain.opacity).toBeGreaterThan(0.1);
     expect(HAZE.background.grain.size).toBeLessThanOrEqual(1); // fine per-pixel static
     expect(HAZE.text.chromatic).toBeUndefined();
+  });
+});
+
+describe("PAPER preset values", () => {
+  it("is bold near-black justified text on a flat white field", () => {
+    expect(PAPER.background.solidColor).toBe("#FFFFFF");
+    expect(PAPER.text.fontWeight).toBe(700);
+    expect(PAPER.text.textAlign).toBe("justify");
+    expect(PAPER.text.textTransform).toBe("lowercase");
+  });
+
+  it("is completely clean — no grain, no shadow, no motion", () => {
+    expect(PAPER.background.grain.opacity).toBe(0);
+    expect(PAPER.text.shadow.blur).toBe(0);
+    expect(PAPER.background.vignette.strength).toBe(0);
+    expect(PAPER.motion.kenBurns.enabled).toBe(false);
   });
 });
 
