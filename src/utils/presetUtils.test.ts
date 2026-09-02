@@ -6,6 +6,7 @@ import { TYPEWRITER } from "../presets/typewriter-preset";
 import { GRIT } from "../presets/grit-preset";
 import { POEM } from "../presets/poem-preset";
 import { GRACE } from "../presets/grace-preset";
+import { HAZE } from "../presets/haze-preset";
 import { CHROMA } from "../presets/chroma-preset";
 
 describe("buildEffectivePreset", () => {
@@ -197,6 +198,23 @@ describe("CHROMA preset values", () => {
     expect(CHROMA.text.chromatic?.opacity).toBeGreaterThan(0);
     expect(CHROMA.text.textTransform).toBe("lowercase");
     expect(CHROMA.text.fontSizeVmin).toBeGreaterThan(MOOD.text.fontSizeVmin);
+  });
+});
+
+describe("HAZE preset values", () => {
+  it("is a blurred, glowing white text on a solid dark field", () => {
+    expect(HAZE.background.solidColor).toBeDefined();
+    expect(HAZE.text.blurFontFrac).toBeGreaterThan(0);       // soft-focus
+    expect(HAZE.text.shadow.color).toBe("#FFFFFF");          // white bloom
+    expect(HAZE.text.shadow.opacity).toBeGreaterThan(0);
+    expect(HAZE.text.color).toBe("#FFFFFF");
+  });
+
+  it("uses justified two-word-per-row columns, heavy grain, no chromatic", () => {
+    expect(HAZE.text.textAlign).toBe("justify");
+    expect(HAZE.text.wrapMaxWords).toBe(2);
+    expect(HAZE.background.grain.opacity).toBeGreaterThan(0.1);
+    expect(HAZE.text.chromatic).toBeUndefined();
   });
 });
 

@@ -16,13 +16,14 @@ import { GRIT } from "./presets/grit-preset";
 import { POEM } from "./presets/poem-preset";
 import { GRACE } from "./presets/grace-preset";
 import { CHROMA } from "./presets/chroma-preset";
+import { HAZE } from "./presets/haze-preset";
 import { buildEffectivePreset } from "./utils/presetUtils";
 import { transcribeInBrowser } from "./browserTranscribe";
 import { alignLyrics, wordsToLines } from "./utils/lyricAlign";
 import { serializeLyrics, parseLyricsFile } from "./utils/lyricFile";
 import { TRANSCRIPTION_ENABLED } from "./config";
 
-const ALL_PRESETS = [MOOD, BRAT, TYPEWRITER, GRIT, POEM, GRACE, CHROMA];
+const ALL_PRESETS = [MOOD, BRAT, TYPEWRITER, GRIT, POEM, GRACE, CHROMA, HAZE];
 
 // Each preset's natural default text colour (index into TEXT_COLOR_OPTIONS):
 // Mood/Typewriter → Cream, Brat → Black (on lime), the rest → White.
@@ -34,6 +35,7 @@ const DEFAULT_COLOR_INDEX: Record<string, number> = {
   poem: 1,
   grace: 1,
   chroma: 1,
+  haze: 1,
 };
 
 // Smallest exportable clip length (seconds), so the trim handles can't cross.
