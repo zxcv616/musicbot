@@ -34,6 +34,11 @@ export interface LyricPreset {
    * the video's fingerprint with no visual cost. Set from the "Flip" toggle.
    */
   flipX?: boolean;
+  /**
+   * Gaussian blur on the background media only (0..1); the text stays crisp.
+   * Set from the "Background blur" slider. No effect on solid-colour fields.
+   */
+  backgroundBlur?: number;
 }
 
 export interface OutputConfig {

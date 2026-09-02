@@ -69,6 +69,16 @@ describe("buildEffectivePreset", () => {
     expect(MOOD.flipX).toBeUndefined(); // base preset untouched
   });
 
+  it("injects backgroundBlur (default 0, and does not mutate base)", () => {
+    const def = buildEffectivePreset(MOOD, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0]);
+    expect(def.backgroundBlur).toBe(0);
+    const set = buildEffectivePreset(
+      MOOD, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0], 1, 0, false, 0.5,
+    );
+    expect(set.backgroundBlur).toBe(0.5);
+    expect(MOOD.backgroundBlur).toBeUndefined(); // base preset untouched
+  });
+
   it("preserves non-overridden preset fields", () => {
     const ep = buildEffectivePreset(BRAT, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0]);
     expect(ep.background.solidColor).toBe("#8ACE00");

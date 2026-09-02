@@ -102,6 +102,8 @@ function App() {
   const [noiseIntensity, setNoiseIntensity] = useState(0.15);
   // Mirror the background media horizontally (text unaffected).
   const [flipX, setFlipX] = useState(false);
+  // Blur on the background media (0..1), default off.
+  const [backgroundBlur, setBackgroundBlur] = useState(0);
   // How a video clip shorter than its slot fills the gap (loop vs hold frame).
   const [videoFit, setVideoFit] = useState<VideoFit>("loop");
   const hasVideo = media.some((m) => m.kind === "video");
@@ -114,8 +116,9 @@ function App() {
       textScale,
       noiseIntensity,
       flipX,
+      backgroundBlur,
     ),
-    [presetIndex, colorIndex, ratioIndex, textScale, noiseIntensity, flipX],
+    [presetIndex, colorIndex, ratioIndex, textScale, noiseIntensity, flipX, backgroundBlur],
   );
 
   // Reset text color to each preset's natural default when switching.
@@ -655,6 +658,27 @@ function App() {
               value={noiseIntensity}
               onChange={(e) => setNoiseIntensity(parseFloat(e.target.value))}
               aria-label="Grain / noise amount"
+              className="w-full accent-emerald-500"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+                Background blur
+              </span>
+              <span className="text-[11px] tabular-nums text-neutral-400">
+                {Math.round(backgroundBlur * 100)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={backgroundBlur}
+              onChange={(e) => setBackgroundBlur(parseFloat(e.target.value))}
+              aria-label="Background blur amount"
               className="w-full accent-emerald-500"
             />
           </div>

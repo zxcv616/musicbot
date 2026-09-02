@@ -316,12 +316,28 @@ export class MoodRenderer {
       panY = clamp(ampY * Math.cos(phase), -slackY, slackY);
     }
 
+    // Optional background blur. Blur samples neighbouring pixels, so without
+    // extra margin it would pull the (empty) frame edge inward and darken the
+    // border — overscan the draw by ~2× the blur radius per side to hide that.
+    const blurAmt = this.preset.backgroundBlur ?? 0;
+    const blurPx = blurAmt > 0 ? blurAmt * 0.04 * Math.min(width, height) : 0;
+    if (blurPx > 0) {
+      const inflate = Math.max(
+        (drawW + 4 * blurPx) / drawW,
+        (drawH + 4 * blurPx) / drawH,
+      );
+      drawW *= inflate;
+      drawH *= inflate;
+    }
+
     const dx = (width - drawW) / 2 + panX;
     const dy = (height - drawH) / 2 + panY;
 
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.filter = `saturate(${bg.saturation}) contrast(${bg.contrast}) brightness(${bg.brightness})`;
+    ctx.filter =
+      `saturate(${bg.saturation}) contrast(${bg.contrast}) brightness(${bg.brightness})` +
+      (blurPx > 0 ? ` blur(${blurPx}px)` : "");
     ctx.drawImage(source, dx, dy, drawW, drawH);
     ctx.restore();
   }
