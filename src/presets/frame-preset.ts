@@ -42,7 +42,7 @@ export const FRAME: LyricPreset = {
     },
     defaultFont: "sans",
     fontWeight: 400,
-    fontSizeVmin: 8,
+    fontSizeVmin: 13,          // big & impactful — wraps so it splits top/bottom
     lineHeight: 1.3,
     letterSpacingEm: 0,
     horizontalScale: 1,

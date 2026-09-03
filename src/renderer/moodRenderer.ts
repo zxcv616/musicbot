@@ -699,22 +699,32 @@ export class MoodRenderer {
     // Blur: fraction of font size → absolute pixels at this resolution.
     const blurPx = (tc.blurFontFrac ?? 0) * fontPx;
 
-    // Split layout: half the words near the top of the frame, half near the
-    // bottom, framing the middle. One line at a time, centred (no next line).
+    // Split layout: the line wraps normally, then FILLS from the top of the
+    // frame downward; rows that don't fit in the top band overflow to the
+    // bottom, filling upward — keeping the middle clear (framing an image).
+    // Top-/bottom-aligned to the frame edges so it hugs them on any aspect.
     if (tc.splitTopBottom) {
-      const words = active.text.trim().split(/\s+/).filter(Boolean);
-      // Top gets the smaller half so odd lines read "…/ + one more below"
-      // (e.g. "woke up this morning" / "to her in a mood").
-      const mid = Math.max(1, Math.floor(words.length / 2));
-      const topRows = this.wrapText(ctx, words.slice(0, mid).join(" "), wrapWidth);
+      const rows = this.wrapText(ctx, active.text, wrapWidth);
+      const topMargin = height * 0.09;    // top text starts here, grows down
+      const bottomMargin = height * 0.91;  // bottom text ends here, grows up
+      // Rows the top holds before overflowing. Measured off the SHORTER side
+      // (like the font) so the split is identical across 9:16 / 1:1 / 16:9
+      // rather than holding more rows on a taller frame.
+      const topCapacity = Math.max(1, Math.floor((Math.min(width, height) * 0.28) / rowH));
+      const topCount = Math.min(rows.length, topCapacity);
+      const topRows = rows.slice(0, topCount);
+      const bottomRows = rows.slice(topCount);
+
+      // Top block top-aligned: its top edge sits at topMargin.
       this.drawTextBlock(
-        ctx, topRows, centerX, height * 0.2, activeRise, rowH, activeAlpha, blurPx, justifyWidth,
+        ctx, topRows, centerX, topMargin + (topRows.length * rowH) / 2,
+        activeRise, rowH, activeAlpha, blurPx, justifyWidth,
       );
-      const bottomText = words.slice(mid).join(" ");
-      if (bottomText) {
-        const bottomRows = this.wrapText(ctx, bottomText, wrapWidth);
+      // Bottom block bottom-aligned: its bottom edge sits at bottomMargin.
+      if (bottomRows.length) {
         this.drawTextBlock(
-          ctx, bottomRows, centerX, height * 0.8, activeRise, rowH, activeAlpha, blurPx, justifyWidth,
+          ctx, bottomRows, centerX, bottomMargin - (bottomRows.length * rowH) / 2,
+          activeRise, rowH, activeAlpha, blurPx, justifyWidth,
         );
       }
       ctx.restore();
