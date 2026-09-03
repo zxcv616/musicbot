@@ -699,6 +699,28 @@ export class MoodRenderer {
     // Blur: fraction of font size → absolute pixels at this resolution.
     const blurPx = (tc.blurFontFrac ?? 0) * fontPx;
 
+    // Split layout: half the words near the top of the frame, half near the
+    // bottom, framing the middle. One line at a time, centred (no next line).
+    if (tc.splitTopBottom) {
+      const words = active.text.trim().split(/\s+/).filter(Boolean);
+      // Top gets the smaller half so odd lines read "…/ + one more below"
+      // (e.g. "woke up this morning" / "to her in a mood").
+      const mid = Math.max(1, Math.floor(words.length / 2));
+      const topRows = this.wrapText(ctx, words.slice(0, mid).join(" "), wrapWidth);
+      this.drawTextBlock(
+        ctx, topRows, centerX, height * 0.2, activeRise, rowH, activeAlpha, blurPx, justifyWidth,
+      );
+      const bottomText = words.slice(mid).join(" ");
+      if (bottomText) {
+        const bottomRows = this.wrapText(ctx, bottomText, wrapWidth);
+        this.drawTextBlock(
+          ctx, bottomRows, centerX, height * 0.8, activeRise, rowH, activeAlpha, blurPx, justifyWidth,
+        );
+      }
+      ctx.restore();
+      return;
+    }
+
     // Active (current) line.
     const activeRows = this.wrapText(ctx, active.text, wrapWidth);
     const activeBottom = this.drawTextBlock(

@@ -8,6 +8,7 @@ import { POEM } from "../presets/poem-preset";
 import { GRACE } from "../presets/grace-preset";
 import { HAZE } from "../presets/haze-preset";
 import { PAPER } from "../presets/paper-preset";
+import { FRAME } from "../presets/frame-preset";
 import { CHROMA } from "../presets/chroma-preset";
 
 describe("buildEffectivePreset", () => {
@@ -255,6 +256,21 @@ describe("PAPER preset values", () => {
     expect(PAPER.text.shadow.blur).toBe(0);
     expect(PAPER.background.vignette.strength).toBe(0);
     expect(PAPER.motion.kenBurns.enabled).toBe(false);
+  });
+});
+
+describe("FRAME preset values", () => {
+  it("shares Haze's grainy charcoal field and crisp white text", () => {
+    expect(FRAME.background.solidColor).toBe("#161616");
+    expect(FRAME.background.grain.opacity).toBeGreaterThan(0.1);
+    expect(FRAME.text.blurFontFrac).toBe(0);
+    expect(FRAME.text.color).toBe("#FFFFFF");
+  });
+
+  it("splits the line top/bottom with normal centred spacing (not justified)", () => {
+    expect(FRAME.text.splitTopBottom).toBe(true);
+    expect(FRAME.text.textAlign).toBe("center");
+    expect(FRAME.text.wrapMaxWords).toBeUndefined();
   });
 });
 

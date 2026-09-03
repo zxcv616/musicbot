@@ -121,6 +121,10 @@ export interface TextConfig {
   // the column width (normal wrapping); a small number forces deliberate
   // stacked chunks (e.g. 2 → two words per row, justify-spread into columns).
   wrapMaxWords?: number;
+  // When true, split the active line's words in half and render the first half
+  // near the top of the frame and the second half near the bottom (framing the
+  // middle) instead of one centred block. Overrides verticalAnchor.
+  splitTopBottom?: boolean;
   // Vertical anchor: fraction of frame height for the text baseline zone.
   // ~0.5–0.62 keeps it in the mobile eye-focus center third, not dead center.
   verticalAnchor: number;
