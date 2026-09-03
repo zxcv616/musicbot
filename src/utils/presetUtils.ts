@@ -9,6 +9,7 @@ import type { LyricPreset, TextColorOption, AspectOption } from "../presets/mood
  * @param noiseIntensity Universal animated noise overlay amount (0..1).
  * @param flipX          Mirror the background media horizontally.
  * @param backgroundBlur Blur on the background media (0..1); text stays crisp.
+ * @param photoIntervalSeconds Seconds per photo before crossfading (0 = default).
  */
 export function buildEffectivePreset(
   base: LyricPreset,
@@ -18,6 +19,7 @@ export function buildEffectivePreset(
   noiseIntensity = 0,
   flipX = false,
   backgroundBlur = 0,
+  photoIntervalSeconds = 0,
 ): LyricPreset {
   return {
     ...base,
@@ -25,6 +27,7 @@ export function buildEffectivePreset(
     noiseIntensity,
     flipX,
     backgroundBlur,
+    photoIntervalSeconds,
     text: {
       ...base.text,
       color: color.color,

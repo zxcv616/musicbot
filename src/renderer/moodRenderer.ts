@@ -41,6 +41,9 @@ export interface ScheduleEntry {
   end: number;
   /** When the item first becomes visible (its crossfade-in start). */
   motionStart: number;
+  /** Which media item fills this slot. Usually the slot index, but a looping
+   * photo schedule cycles (k % count), so slots can outnumber the media. */
+  mediaIndex: number;
 }
 
 export interface FrameInputs {
@@ -153,7 +156,7 @@ export class MoodRenderer {
       const entry = schedule[layer.index];
       this.drawMediaItem(
         ctx,
-        media[layer.index],
+        media[entry.mediaIndex],
         width,
         height,
         t - entry.motionStart,
@@ -213,7 +216,27 @@ export class MoodRenderer {
           : 0;
 
     if (count <= 1 || duration <= 0) {
-      return [{ start: 0, end: Number.POSITIVE_INFINITY, motionStart: 0 }];
+      return [{ start: 0, end: Number.POSITIVE_INFINITY, motionStart: 0, mediaIndex: 0 }];
+    }
+
+    // Fixed-rate photo slideshow: when a photo interval is set, cycle through the
+    // media at that pace (looping back to the first) for the whole song, instead
+    // of showing each once across the full duration. App only enables this for
+    // all-image sets, so this never fights per-frame video seeking.
+    const interval = this.preset.photoIntervalSeconds ?? 0;
+    if (interval > 0) {
+      const slots = Math.max(1, Math.ceil(duration / interval));
+      const schedule: ScheduleEntry[] = [];
+      for (let k = 0; k < slots; k++) {
+        const start = k * interval;
+        schedule.push({
+          start,
+          end: Math.min((k + 1) * interval, duration),
+          motionStart: Math.max(0, start - cf),
+          mediaIndex: k % count,
+        });
+      }
+      return schedule;
     }
 
     // Even split points, then snap interior boundaries to the nearest lyric
@@ -232,7 +255,7 @@ export class MoodRenderer {
       if (bounds[k] <= bounds[k - 1]) bounds[k] = bounds[k - 1] + 0.01;
     }
 
-    const schedule: { start: number; end: number; motionStart: number }[] = [];
+    const schedule: ScheduleEntry[] = [];
     for (let k = 0; k < count; k++) {
       schedule.push({
         start: bounds[k],
@@ -240,6 +263,7 @@ export class MoodRenderer {
         // Motion begins as the image first appears (its crossfade-in start) and
         // runs continuously for its whole life, so the drift never jumps.
         motionStart: Math.max(0, bounds[k] - cf),
+        mediaIndex: k,
       });
     }
     return schedule;

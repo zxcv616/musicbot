@@ -316,10 +316,11 @@ export async function exportMoodVideo(opts: ExportOptions): Promise<Blob> {
       for (const layer of renderer.visibleAt(t, schedule)) {
         // With no media (solid-colour presets) the schedule still has one slot
         // but there's no item to seek — the colour field is the background.
-        const item = exportMedia[layer.index];
+        const entry = schedule[layer.index];
+        const item = exportMedia[entry.mediaIndex];
         if (item?.kind === "video") {
           const local = renderer.clipLocalTime(
-            schedule[layer.index],
+            entry,
             item.duration,
             item.fit,
             t,

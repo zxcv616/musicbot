@@ -39,6 +39,12 @@ export interface LyricPreset {
    * Set from the "Background blur" slider. No effect on solid-colour fields.
    */
   backgroundBlur?: number;
+  /**
+   * Seconds each photo shows before crossfading to the next, cycling through
+   * the images for the whole song. 0 = even-spread each image once across the
+   * song (the default). App sets this only for all-image media sets.
+   */
+  photoIntervalSeconds?: number;
 }
 
 export interface OutputConfig {

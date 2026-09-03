@@ -104,9 +104,14 @@ function App() {
   const [flipX, setFlipX] = useState(false);
   // Blur on the background media (0..1), default off.
   const [backgroundBlur, setBackgroundBlur] = useState(0);
+  // Seconds each photo shows before crossfading, for all-image sets.
+  const [photoInterval, setPhotoInterval] = useState(4);
   // How a video clip shorter than its slot fills the gap (loop vs hold frame).
   const [videoFit, setVideoFit] = useState<VideoFit>("loop");
   const hasVideo = media.some((m) => m.kind === "video");
+  // The photo-rate control only applies to multi-image sets (no video).
+  const imageCount = media.filter((m) => m.kind === "image").length;
+  const multiPhoto = imageCount >= 2 && !hasVideo;
 
   const effectivePreset = useMemo(
     () => buildEffectivePreset(
@@ -117,8 +122,12 @@ function App() {
       noiseIntensity,
       flipX,
       backgroundBlur,
+      multiPhoto ? photoInterval : 0,
     ),
-    [presetIndex, colorIndex, ratioIndex, textScale, noiseIntensity, flipX, backgroundBlur],
+    [
+      presetIndex, colorIndex, ratioIndex, textScale, noiseIntensity,
+      flipX, backgroundBlur, multiPhoto, photoInterval,
+    ],
   );
 
   // Reset text color to each preset's natural default when switching.
@@ -515,6 +524,32 @@ function App() {
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+
+          {multiPhoto && (
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+                  Photo change
+                </span>
+                <span className="text-[11px] tabular-nums text-neutral-400">
+                  {photoInterval}s each
+                </span>
+              </div>
+              <input
+                type="range"
+                min={2}
+                max={12}
+                step={0.5}
+                value={photoInterval}
+                onChange={(e) => setPhotoInterval(parseFloat(e.target.value))}
+                aria-label="Seconds per photo"
+                className="w-full accent-emerald-500"
+              />
+              <p className="text-[11px] text-neutral-600 leading-snug">
+                How long each photo shows before crossfading (cycles through all).
+              </p>
             </div>
           )}
 
