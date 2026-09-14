@@ -106,14 +106,13 @@ function App() {
   const [flipX, setFlipX] = useState(false);
   // Blur on the background media (0..1), default off.
   const [backgroundBlur, setBackgroundBlur] = useState(0);
-  // Seconds each photo shows before crossfading, for all-image sets.
-  const [photoInterval, setPhotoInterval] = useState(4);
+  // Seconds each clip (photo or video) shows before cutting to the next.
+  const [clipInterval, setClipInterval] = useState(4);
   // How a video clip shorter than its slot fills the gap (loop vs hold frame).
   const [videoFit, setVideoFit] = useState<VideoFit>("loop");
   const hasVideo = media.some((m) => m.kind === "video");
-  // The photo-rate control only applies to multi-image sets (no video).
-  const imageCount = media.filter((m) => m.kind === "image").length;
-  const multiPhoto = imageCount >= 2 && !hasVideo;
+  // The clip-rate control applies to any 2+ media set (photos and/or videos).
+  const multiClip = media.length >= 2;
 
   const effectivePreset = useMemo(
     () => buildEffectivePreset(
@@ -124,11 +123,11 @@ function App() {
       noiseIntensity,
       flipX,
       backgroundBlur,
-      multiPhoto ? photoInterval : 0,
+      multiClip ? clipInterval : 0,
     ),
     [
       presetIndex, colorIndex, ratioIndex, textScale, noiseIntensity,
-      flipX, backgroundBlur, multiPhoto, photoInterval,
+      flipX, backgroundBlur, multiClip, clipInterval,
     ],
   );
 
@@ -529,14 +528,14 @@ function App() {
             </div>
           )}
 
-          {multiPhoto && (
+          {multiClip && (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] uppercase tracking-wide text-neutral-500">
-                  Photo change
+                  {hasVideo ? "Video change" : "Photo change"}
                 </span>
                 <span className="text-[11px] tabular-nums text-neutral-400">
-                  {photoInterval}s each
+                  {clipInterval}s each
                 </span>
               </div>
               <input
@@ -544,13 +543,14 @@ function App() {
                 min={2}
                 max={12}
                 step={0.5}
-                value={photoInterval}
-                onChange={(e) => setPhotoInterval(parseFloat(e.target.value))}
-                aria-label="Seconds per photo"
+                value={clipInterval}
+                onChange={(e) => setClipInterval(parseFloat(e.target.value))}
+                aria-label="Seconds per clip"
                 className="w-full accent-emerald-500"
               />
               <p className="text-[11px] text-neutral-600 leading-snug">
-                How long each photo shows before crossfading (cycles through all).
+                How long each {hasVideo ? "video" : "photo"} shows before cutting
+                to the next (cycles through all).
               </p>
             </div>
           )}

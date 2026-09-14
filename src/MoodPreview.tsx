@@ -4,6 +4,7 @@ import {
   MoodRenderer,
   type BackgroundMedia,
   type LyricLine,
+  type ScheduleEntry,
 } from "./renderer/moodRenderer";
 
 interface MoodPreviewProps {
@@ -104,18 +105,25 @@ function syncBackgroundVideos(
   if (!media.some((m) => m.kind === "video")) return;
 
   const schedule = renderer.getSchedule(media.length, duration, lines);
-  const visible = new Set(renderer.visibleAt(t, schedule).map((v) => v.index));
+  // Map each media item to the on-screen slot showing it (if any). A rotating/
+  // looping schedule has more slots than media, so we key by the slot's
+  // mediaIndex rather than assuming slot index === media index.
+  const onScreen = new Map<number, ScheduleEntry>();
+  for (const layer of renderer.visibleAt(t, schedule)) {
+    onScreen.set(schedule[layer.index].mediaIndex, schedule[layer.index]);
+  }
 
   media.forEach((m, idx) => {
     if (m.kind !== "video") return;
     const v = m.video;
 
-    if (!visible.has(idx)) {
+    const entry = onScreen.get(idx);
+    if (!entry) {
       if (!v.paused) v.pause();
       return;
     }
 
-    const desired = renderer.clipLocalTime(schedule[idx], m.duration, m.fit, t);
+    const desired = renderer.clipLocalTime(entry, m.duration, m.fit, t);
     v.loop = m.fit === "loop";
 
     if (playing) {

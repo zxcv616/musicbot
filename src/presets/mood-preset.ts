@@ -40,11 +40,11 @@ export interface LyricPreset {
    */
   backgroundBlur?: number;
   /**
-   * Seconds each photo shows before crossfading to the next, cycling through
-   * the images for the whole song. 0 = even-spread each image once across the
-   * song (the default). App sets this only for all-image media sets.
+   * Seconds each clip (photo OR video) shows before cutting to the next,
+   * cycling through all the media for the whole song. 0 = even-spread each item
+   * once across the song (the default). App sets this for any 2+ media set.
    */
-  photoIntervalSeconds?: number;
+  clipIntervalSeconds?: number;
 }
 
 export interface OutputConfig {

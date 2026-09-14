@@ -14,7 +14,7 @@ describe("getSchedule", () => {
 
   it("cycles through photos at a fixed interval, looping to fill the song", () => {
     const r = new MoodRenderer(MOOD);
-    r.preset = { ...MOOD, photoIntervalSeconds: 5 };
+    r.preset = { ...MOOD, clipIntervalSeconds: 5 };
     const s = r.getSchedule(3, 22, []);
     expect(s).toHaveLength(5); // ceil(22 / 5)
     expect(s.map((e) => e.mediaIndex)).toEqual([0, 1, 2, 0, 1]); // wraps at 3
@@ -24,16 +24,16 @@ describe("getSchedule", () => {
 
   it("faster interval = more, shorter slots (higher change rate)", () => {
     const r = new MoodRenderer(MOOD);
-    r.preset = { ...MOOD, photoIntervalSeconds: 3 };
+    r.preset = { ...MOOD, clipIntervalSeconds: 3 };
     const fast = r.getSchedule(2, 30, []);
-    r.preset = { ...MOOD, photoIntervalSeconds: 6 };
+    r.preset = { ...MOOD, clipIntervalSeconds: 6 };
     const slow = r.getSchedule(2, 30, []);
     expect(fast.length).toBeGreaterThan(slow.length);
   });
 
   it("returns a single infinite slot for one image", () => {
     const r = new MoodRenderer(MOOD);
-    r.preset = { ...MOOD, photoIntervalSeconds: 5 };
+    r.preset = { ...MOOD, clipIntervalSeconds: 5 };
     const s = r.getSchedule(1, 30, []);
     expect(s).toHaveLength(1);
     expect(s[0].mediaIndex).toBe(0);

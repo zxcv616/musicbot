@@ -219,11 +219,12 @@ export class MoodRenderer {
       return [{ start: 0, end: Number.POSITIVE_INFINITY, motionStart: 0, mediaIndex: 0 }];
     }
 
-    // Fixed-rate photo slideshow: when a photo interval is set, cycle through the
-    // media at that pace (looping back to the first) for the whole song, instead
-    // of showing each once across the full duration. App only enables this for
-    // all-image sets, so this never fights per-frame video seeking.
-    const interval = this.preset.photoIntervalSeconds ?? 0;
+    // Fixed-rate slideshow: when a clip interval is set, cut through the media
+    // (photos AND/OR videos) at that pace, looping back to the first, for the
+    // whole song — instead of showing each once across the full duration. Each
+    // slot carries mediaIndex = k % count so consumers (draw, export, preview
+    // video sync) map the slot back to the right item.
+    const interval = this.preset.clipIntervalSeconds ?? 0;
     if (interval > 0) {
       const slots = Math.max(1, Math.ceil(duration / interval));
       const schedule: ScheduleEntry[] = [];
