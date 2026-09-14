@@ -55,8 +55,7 @@ export const HAZE: LyricPreset = {
     nextLineOpacity: 0,
     lineHoldSeconds: 0.5,
     clearGapSeconds: 1.6,
-    textAlign: "justify",      // spread each row's words into columns
-    wrapMaxWords: 2,           // deliberate two-word-per-row stacked chunks
+    textAlign: "left",         // words build left-to-right, not spread apart
     verticalAnchor: 0.5,
     horizontalPaddingVw: 12,
     shadow: { color: "#FFFFFF", blur: 12, opacity: 0.4 }, // tight halo, not a bloom

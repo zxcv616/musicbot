@@ -657,8 +657,6 @@ export class MoodRenderer {
     // Text is stretched by horizontalScale when drawn, so wrap against the
     // padding-limited width divided by that scale.
     const wrapWidth = maxWidth / tc.horizontalScale;
-    // Justified layout spreads each row across the full wrap column.
-    const justifyWidth = tc.textAlign === "justify" ? wrapWidth : undefined;
 
     const active = lines[activeIndex];
     const nextLine = lines[activeIndex + 1];
@@ -718,13 +716,13 @@ export class MoodRenderer {
       // Top block top-aligned: its top edge sits at topMargin.
       this.drawTextBlock(
         ctx, topRows, centerX, topMargin + (topRows.length * rowH) / 2,
-        activeRise, rowH, activeAlpha, blurPx, justifyWidth,
+        activeRise, rowH, activeAlpha, blurPx, wrapWidth,
       );
       // Bottom block bottom-aligned: its bottom edge sits at bottomMargin.
       if (bottomRows.length) {
         this.drawTextBlock(
           ctx, bottomRows, centerX, bottomMargin - (bottomRows.length * rowH) / 2,
-          activeRise, rowH, activeAlpha, blurPx, justifyWidth,
+          activeRise, rowH, activeAlpha, blurPx, wrapWidth,
         );
       }
       ctx.restore();
@@ -742,7 +740,7 @@ export class MoodRenderer {
       rowH,
       activeAlpha,
       blurPx,
-      justifyWidth,
+      wrapWidth,
     );
 
     // Next line, dimmed, sitting just below the current line.
@@ -753,7 +751,7 @@ export class MoodRenderer {
         const gap = rowH * 0.35;
         const nextCenterY = activeBottom + gap + (nextRows.length * rowH) / 2;
         this.drawTextBlock(
-          ctx, nextRows, centerX, nextCenterY, 0, rowH, nextAlpha, blurPx, justifyWidth,
+          ctx, nextRows, centerX, nextCenterY, 0, rowH, nextAlpha, blurPx, wrapWidth,
         );
       }
     }
@@ -767,8 +765,10 @@ export class MoodRenderer {
    * so the block expands/contracts symmetrically. Returns block bottom in
    * screen-space pixels (accounting for vertical scale).
    *
-   * `justifyWidth` (pre-scale units, i.e. the wrap width): when set, each row's
-   * words are spread so the row fills the full column — the poem-column look.
+   * `columnWidth` is the wrap-column width (pre-scale). It's used for the
+   * non-centred layouts read from `text.textAlign`: "left" anchors each row at
+   * the column's left edge (words build left-to-right); "justify" spreads each
+   * row's words to fill the column. "center" ignores it and draws at the origin.
    */
   private drawTextBlock(
     ctx: CanvasRenderingContext2D,
@@ -779,7 +779,7 @@ export class MoodRenderer {
     rowH: number,
     alpha: number,
     blurPx: number,
-    justifyWidth?: number,
+    columnWidth?: number,
   ): number {
     const tc = this.preset.text;
     const total = rows.length * rowH;
@@ -799,33 +799,46 @@ export class MoodRenderer {
 
     if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
 
-    // Paint each row via `paint` (fill by default; stroke for the outline
-    // ring). textAlign is "center", so paint at x = 0 (the translated centre)
-    // — unless justifying, where each word is placed across the column.
+    // Paint each row via `paint` (fill by default; stroke for the outline ring).
+    // Layout comes from text.textAlign: "center" (default) draws at the origin;
+    // "left" anchors rows at the column's left edge; "justify" spreads words.
+    const align = tc.textAlign;
     type Painter = (text: string, x: number, y: number) => void;
     const fillPainter: Painter = (s, x, y) => ctx.fillText(s, x, y);
     const drawRows = (paint: Painter = fillPainter) => {
       for (let i = 0; i < rows.length; i++) {
         const y = -total / 2 + rowH * (i + 0.5);
-        if (justifyWidth === undefined) {
+
+        // Left-aligned: every row starts at the column's left edge.
+        if (align === "left" && columnWidth !== undefined) {
+          const prev = ctx.textAlign;
+          ctx.textAlign = "left";
+          paint(rows[i], -columnWidth / 2, y);
+          ctx.textAlign = prev;
+          continue;
+        }
+
+        // Centred: textAlign is already "center", so draw at the origin.
+        if (align !== "justify" || columnWidth === undefined) {
           paint(rows[i], 0, y);
           continue;
         }
+
+        // Justified: spread the row's words to fill the column.
         const words = rows[i].split(" ");
         if (words.length === 1) {
-          // A lone word can't be spread; anchor it at the column's left edge.
           const prev = ctx.textAlign;
           ctx.textAlign = "left";
-          paint(words[0], -justifyWidth / 2, y);
+          paint(words[0], -columnWidth / 2, y);
           ctx.textAlign = prev;
           continue;
         }
         const widths = words.map((w) => ctx.measureText(w).width);
         const used = widths.reduce((a, b) => a + b, 0);
-        const gap = (justifyWidth - used) / (words.length - 1);
+        const gap = (columnWidth - used) / (words.length - 1);
         const prev = ctx.textAlign;
         ctx.textAlign = "left";
-        let x = -justifyWidth / 2;
+        let x = -columnWidth / 2;
         for (let w = 0; w < words.length; w++) {
           paint(words[w], x, y);
           x += widths[w] + gap;

@@ -234,9 +234,9 @@ describe("HAZE preset values", () => {
     expect(HAZE.text.color).toBe("#FFFFFF");
   });
 
-  it("uses justified two-word-per-row columns, fine static grain, no chromatic", () => {
-    expect(HAZE.text.textAlign).toBe("justify");
-    expect(HAZE.text.wrapMaxWords).toBe(2);
+  it("builds text left-to-right, fine static grain, no chromatic", () => {
+    expect(HAZE.text.textAlign).toBe("left");
+    expect(HAZE.text.wrapMaxWords).toBeUndefined();
     expect(HAZE.background.grain.opacity).toBeGreaterThan(0.1);
     expect(HAZE.background.grain.size).toBeLessThanOrEqual(1); // fine per-pixel static
     expect(HAZE.text.chromatic).toBeUndefined();

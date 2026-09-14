@@ -114,9 +114,10 @@ export interface TextConfig {
   lineHoldSeconds: number;
   clearGapSeconds: number;
   // "center": rows centred (default). "justify": rows spread so both edges of
-  // the wrap column align — the narrow poem-column look. Column width is set
+  // the wrap column align — the narrow poem-column look. "left": rows anchored
+  // at the column's left edge, words building left-to-right. Column width is set
   // via horizontalPaddingVw (large padding = narrow column).
-  textAlign: "center" | "justify";
+  textAlign: "center" | "justify" | "left";
   // Optional hard cap on words per wrapped row. Undefined = fill each row to
   // the column width (normal wrapping); a small number forces deliberate
   // stacked chunks (e.g. 2 → two words per row, justify-spread into columns).
