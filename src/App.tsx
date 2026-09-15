@@ -108,6 +108,8 @@ function App() {
   const [backgroundBlur, setBackgroundBlur] = useState(0);
   // Seconds each clip (photo or video) shows before cutting to the next.
   const [clipInterval, setClipInterval] = useState(4);
+  // Transition between clips: crossfade (false) or straight cut (true).
+  const [hardCut, setHardCut] = useState(false);
   // How a video clip shorter than its slot fills the gap (loop vs hold frame).
   const [videoFit, setVideoFit] = useState<VideoFit>("loop");
   const hasVideo = media.some((m) => m.kind === "video");
@@ -124,10 +126,11 @@ function App() {
       flipX,
       backgroundBlur,
       multiClip ? clipInterval : 0,
+      multiClip && hardCut,
     ),
     [
       presetIndex, colorIndex, ratioIndex, textScale, noiseIntensity,
-      flipX, backgroundBlur, multiClip, clipInterval,
+      flipX, backgroundBlur, multiClip, clipInterval, hardCut,
     ],
   );
 
@@ -552,6 +555,34 @@ function App() {
                 How long each {hasVideo ? "video" : "photo"} shows before cutting
                 to the next (cycles through all).
               </p>
+            </div>
+          )}
+
+          {multiClip && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-[11px] uppercase tracking-wide text-neutral-500">
+                Transition
+              </span>
+              <div className="flex gap-1.5">
+                {([["fade", false], ["cut", true]] as const).map(([label, val]) => (
+                  <button
+                    key={label}
+                    onClick={() => setHardCut(val)}
+                    title={
+                      val
+                        ? "Cut straight to the next clip"
+                        : "Crossfade into the next clip"
+                    }
+                    className={`flex-1 rounded px-2 py-1 text-xs font-medium capitalize transition-colors ${
+                      hardCut === val
+                        ? "bg-neutral-100 text-neutral-900"
+                        : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

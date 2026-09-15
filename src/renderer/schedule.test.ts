@@ -38,4 +38,17 @@ describe("getSchedule", () => {
     expect(s).toHaveLength(1);
     expect(s[0].mediaIndex).toBe(0);
   });
+
+  it("hard cut (crossfade 0) shows one clip at a boundary; fade overlaps two", () => {
+    const r = new MoodRenderer(MOOD);
+    // Fade: at 3.5s the 4s slot is mid-crossfade, so the incoming clip is also on.
+    r.preset = { ...MOOD, clipIntervalSeconds: 4, background: { ...MOOD.background, crossfadeSeconds: 1 } };
+    const faded = r.getSchedule(2, 20, []);
+    expect(r.visibleAt(3.5, faded)).toHaveLength(2);
+    // Cut: crossfade 0 means never more than one clip at a time.
+    r.preset = { ...MOOD, clipIntervalSeconds: 4, background: { ...MOOD.background, crossfadeSeconds: 0 } };
+    const cut = r.getSchedule(2, 20, []);
+    expect(r.visibleAt(3.5, cut)).toHaveLength(1);
+    expect(r.visibleAt(3.99, cut)).toHaveLength(1);
+  });
 });

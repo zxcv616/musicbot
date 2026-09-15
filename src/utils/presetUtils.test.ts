@@ -80,6 +80,19 @@ describe("buildEffectivePreset", () => {
     expect(MOOD.backgroundBlur).toBeUndefined(); // base preset untouched
   });
 
+  it("hardCut zeroes the crossfade (fade keeps the preset's) without mutating base", () => {
+    const baseCf = MOOD.background.crossfadeSeconds;
+    const fade = buildEffectivePreset(
+      MOOD, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0], 1, 0, false, 0, 0, false,
+    );
+    expect(fade.background.crossfadeSeconds).toBe(baseCf);
+    const cut = buildEffectivePreset(
+      MOOD, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0], 1, 0, false, 0, 0, true,
+    );
+    expect(cut.background.crossfadeSeconds).toBe(0);
+    expect(MOOD.background.crossfadeSeconds).toBe(baseCf); // base untouched
+  });
+
   it("preserves non-overridden preset fields", () => {
     const ep = buildEffectivePreset(BRAT, TEXT_COLOR_OPTIONS[0], ASPECT_OPTIONS[0]);
     expect(ep.background.solidColor).toBe("#8ACE00");

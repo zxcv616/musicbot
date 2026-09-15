@@ -10,6 +10,7 @@ import type { LyricPreset, TextColorOption, AspectOption } from "../presets/mood
  * @param flipX          Mirror the background media horizontally.
  * @param backgroundBlur Blur on the background media (0..1); text stays crisp.
  * @param clipIntervalSeconds Seconds per clip (photo/video) before cutting (0 = default).
+ * @param hardCut            Cut straight between clips (no crossfade) when true.
  */
 export function buildEffectivePreset(
   base: LyricPreset,
@@ -20,10 +21,16 @@ export function buildEffectivePreset(
   flipX = false,
   backgroundBlur = 0,
   clipIntervalSeconds = 0,
+  hardCut = false,
 ): LyricPreset {
   return {
     ...base,
     output: { ...base.output, width: aspect.width, height: aspect.height },
+    // Hard cut = zero crossfade, so visibleAt shows one clip at a time.
+    background: {
+      ...base.background,
+      crossfadeSeconds: hardCut ? 0 : base.background.crossfadeSeconds,
+    },
     noiseIntensity,
     flipX,
     backgroundBlur,
